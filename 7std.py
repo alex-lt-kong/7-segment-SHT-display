@@ -1,8 +1,11 @@
+#!/usr/bin/python3
+
 import importlib
 import json
 import logging
 import os
 import Pi7SegPy
+import signal
 import time
 import threading
 
@@ -18,7 +21,7 @@ def temp_refresh_loop():
     global temperature
     while stop_signal is False:
         retry = 0
-        while retry < 60:
+        while retry < 60 and stop_signal is False:
             retry += 1
             # retry 60 times
             try:
@@ -80,14 +83,16 @@ def main():
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
+    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, cleanup)
     #emailer = importlib.machinery.SourceFileLoader(
     #                'emailer',
     #                settings['email']['path']
     #            ).load_module()
-   # th_email = threading.Thread(target=emailer.send_service_start_notification,
-   #                             kwargs={'settings_path': os.path.join(app_dir, 'settings.json'),
-   #                                     'service_name': '7Seg Temperature Display',
-   #                                     'log_path': settings['app']['log_path']})
+    #th_email = threading.Thread(target=emailer.send_service_start_notification,
+    #                            kwargs={'settings_path': os.path.join(app_dir, 'settings.json'),
+    #                                    'service_name': '7Seg Temperature Display',
+    #                                    'log_path': settings['app']['log_path']})
 
     threading.Thread(target=temp_refresh_loop, args=()).start()
     threading.Thread(target=display_refresh_loop, args=()).start()
