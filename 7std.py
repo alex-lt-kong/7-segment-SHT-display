@@ -18,28 +18,27 @@ temperature = 0
 
 def temp_refresh_loop():
 
+    max_retry = 360
     global temperature
     while stop_signal is False:
         retry = 0
-        while retry < 60 and stop_signal is False:
+        while retry < max_retry and stop_signal is False:
             retry += 1
-            # retry 60 times
             try:
                 with open('/sys/bus/w1/devices/28-01131a3efcd4/w1_slave', 'r') as f:
                     data = f.read()
-
                     if "YES" in data:
                         (discard, sep, reading) = data.partition(' t=')
                         temperature = round(float(reading) / 1000.0, 1)
                     else:
-                        raise ValueError()
+                        raise ValueError('YES tag not found in w1_slave')
             except Exception as e:
-                logging.error(e)
-                time.sleep(1)
-        if retry >= 60:
+                logging.error(f'{e}, retry={retry}')
+                time.sleep(5)
+        if retry >= max_retry:
             temperature = 123.4
 
-        for i in range(60):
+        for i in range(600):
             if stop_signal:
                 return
             time.sleep(1)
