@@ -30,13 +30,17 @@ def temp_refresh_loop():
                     if "YES" in data:
                         (discard, sep, reading) = data.partition(' t=')
                         temperature = round(float(reading) / 1000.0, 1)
+                        break
                     else:
                         raise ValueError('YES tag not found in w1_slave')
             except Exception as e:
                 logging.error(f'{e}, retry={retry}')
                 time.sleep(5)
+                
         if retry >= max_retry:
             temperature = 123.4
+        else if retry > 1:
+            logging.info('Temp sensor recovered from error')
 
         for i in range(600):
             if stop_signal:
