@@ -39,7 +39,7 @@ def temp_refresh_loop():
                 
         if retry >= max_retry:
             temperature = 123.4
-        else if retry > 1:
+        elif retry > 1:
             logging.info('Temp sensor recovered from error')
 
         for i in range(600):
