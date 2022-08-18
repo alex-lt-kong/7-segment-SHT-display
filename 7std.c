@@ -78,44 +78,25 @@ uint8_t available_chars[] = {
   0b10010000, // 9
 };
 
-void* read_temp(void* temperature) {
-  char device_path[] = "/sys/bus/w1/devices/28-01131a3efcd4/w1_slave";
-  char buf[256];
-  while (1) {
-    int fd = open(device_path, O_RDONLY);
-    if(fd >= 0) {
-      if(read( fd, buf, sizeof(buf) ) > 0) {          
-          char* temp_str = strstr(buf, "t=") + 2;
-          sscanf(temp_str, "%d", (int16_t*)temperature);
-      }
-      close(fd);
-    } else {
-      fprintf(stderr, "Unable to open device at [%s], skipped this read iteration.\n", device_path);
-    }
-    sleep(60);
-  }
-}
-
 int main() {
-  int16_t temperature = 65535;
   if (gpioInitialise() < 0) {
     fprintf(stderr, "pigpio initialisation failed\n");
     return 1;
   }
-  pthread_t id;
-  int err = pthread_create(&id, NULL, read_temp, &temperature);
-  initt();
+  //initt();
   uint8_t vals[4];
   bool with_dots[] = {0,1,0,0};
   unsigned int interval = 256;
   while (1) {
     ++interval;
-    if (interval > 128) {
-      vals[0] = (temperature % 100000) / 10000;
-      vals[1] = (temperature % 10000) / 1000;
-      vals[2] = (temperature % 1000) / 100;
-      vals[3] = (temperature % 100) / 10;
-      // printf("%f: %d%d%d%d\n", temperature / 1000.0, vals[0], vals[1], vals[2], vals[3]);
+    if (interval > 16) {
+      time_t now = time(NULL);
+      struct tm *tm_struct = localtime(&now);      
+      vals[0] = tm_struct->tm_hour / 10;
+      vals[1] = tm_struct->tm_hour % 10;
+      vals[2] = tm_struct->tm_min / 10;
+      vals[3] = tm_struct->tm_min % 10;
+      //printf("%f: %d%d%d%d\n", temperature / 1000.0, vals[0], vals[1], vals[2], vals[3]);
       interval = 0;
     }
 
