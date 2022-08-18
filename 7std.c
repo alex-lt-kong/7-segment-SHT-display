@@ -115,7 +115,7 @@ int main() {
       vals[1] = (temperature % 10000) / 1000;
       vals[2] = (temperature % 1000) / 100;
       vals[3] = (temperature % 100) / 10;
-      printf("%f: %d%d%d%d\n", temperature / 1000.0, vals[0], vals[1], vals[2], vals[3]);
+      // printf("%f: %d%d%d%d\n", temperature / 1000.0, vals[0], vals[1], vals[2], vals[3]);
       interval = 0;
     }
 
@@ -128,7 +128,6 @@ int main() {
       gpioWrite(latch, PI_LOW);      
       usleep(5000);
     }
-    
   }
 
   return 0;
