@@ -1,6 +1,6 @@
-# 7-segment-temperature-display
+# 7-segment-SHT-display
 
-Display current temperature on a 7-segment LED display (digital tube) from a DS18B20 sensor
+Display current temperature and relative humidity on a 7-segment LED display (digital tube) from a SHT31 sensor
 
 ## Installation
 
@@ -12,7 +12,7 @@ Display current temperature on a 7-segment LED display (digital tube) from a DS1
 
 * Check status of `i2c` device with `dmesg | grep i2c`.
 
-* pigpio
+* `pigpio` to interact with GPIO.
 ```
 git clone https://github.com/joan2937/pigpio
 cd ./pigpio
