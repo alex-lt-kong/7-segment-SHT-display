@@ -6,7 +6,11 @@ Display current temperature on a 7-segment LED display (digital tube) from a DS1
 
 ### Dependency
 
-* New `LD_LIBRARY_PATH`: `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/`
+* New `LD_LIBRARY_PATH`: `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/`.
+
+* Enable `I2C interface` with `raspi-config`.
+
+* Check status of `i2c` device with `dmesg | grep i2c`.
 
 * pigpio
 ```
