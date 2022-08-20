@@ -1,10 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <linux/i2c-dev.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
- 
-void main() 
-{
-
+#include <syslog.h>
+int main() {
+openlog("7std.out", LOG_PID | LOG_CONS, 0);
+  syslog(LOG_INFO, "Start logging");
+  closelog();
 }
