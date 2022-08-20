@@ -1,5 +1,5 @@
-main: 7std.c
-	gcc 7std.c -o 7std.out -lpigpio -lpthread
+main: 7ssd.c
+	gcc 7ssd.c -o 7ssd.out -lpigpio -lpthread
 
 clean:
 	rm *.out *.o
