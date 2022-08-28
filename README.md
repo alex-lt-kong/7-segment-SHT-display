@@ -1,18 +1,17 @@
 # 7-segment-SHT-display
 
-Display current temperature and relative humidity on a 7-segment LED display (digital tube) from a SHT31 sensor
+Display real-time temperature and relative humidity on an 8-digit 7-segment LED display (digital tube) from an SHT31 sensor
 
-## Installation
-
-### Dependency
+## Environment and dependency
 
 * New `LD_LIBRARY_PATH`: `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/`.
 
 * Enable `I2C interface` with `raspi-config`.
 
-* Check status of `i2c` device with `dmesg | grep i2c`.
+* Check status of `I2C` device with `dmesg | grep i2c`.
 
-* `pigpio` to interact with GPIO.
+* `pigpio` to manipulate with GPIO pins.
+
 ```
 git clone https://github.com/joan2937/pigpio
 cd ./pigpio
@@ -23,13 +22,13 @@ make
 make install
 ```
 
-# Images
+## Hardware
 
-### 7-segment Digital Tube
+### 8-digit 7-segment Digital Tube
 <img src="./images/7seg-digital-tube.jpg"></img>
+
+### Temperature and Humidty Sensor (SHT31)
+<img src="./images/temp-humidity-sensor.jpg"></img>
 
 ### Installation
 <img src="./images/installation.jpg"></img>
-
-### Temperature Sensor
-<img src="./images/temp-sensor.jpg"></img>

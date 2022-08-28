@@ -142,8 +142,8 @@ uint8_t available_chars[] = {
 };
 
 int main(int argc, char **argv) {
-  openlog(argv[0], LOG_PID | LOG_CONS, 0);
-  syslog(LOG_INFO, "%s started\n", argv[0]);
+  openlog("7ssd.out", LOG_PID | LOG_CONS, 0);
+  syslog(LOG_INFO, "7ssd.out started\n", argv[0]);
 
   if (gpioInitialise() < 0) {
     syslog(LOG_ERR, "pigpio initialization failed, program will quit\n");
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
       // 2nd byte: controls which digit the above 7-segment definiton should be applied to.
       gpioWrite(latch, PI_HIGH);
       gpioWrite(latch, PI_LOW);      
-      usleep(1000);
+      usleep(500);
     }
   }
   pthread_join(tid, NULL);
