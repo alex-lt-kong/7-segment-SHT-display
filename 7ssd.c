@@ -129,13 +129,12 @@ void* thread_set_7seg_display(void* payload) {
       int temp_celsius = pl->temp_celsius * 10;
       int humidity = pl->humidity * 10;
       vals[0] = 10;
-      vals[0] = temp_celsius % 10000 / 1000;
       vals[1] = temp_celsius % 1000 / 100;
       vals[2] = temp_celsius % 100  / 10;
       vals[3] = temp_celsius % 10;
       vals[4] = humidity % 10000 / 1000;
       if (vals[4] == 0) {
-        //vals[4] = 10;
+        vals[4] = 10;
       }
       vals[5] = humidity % 1000 / 100;
       vals[6] = humidity % 100  / 10;
