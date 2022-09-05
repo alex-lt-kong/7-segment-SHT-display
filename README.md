@@ -43,7 +43,10 @@ data are supplied.
   * We use another pin (a.k.a data or DI0) to write 0's and 1's to the shift register by following the frequency
 of the SCLK pin.
   * We use a third pin (a.k.a latch or RCLK) to copy what is in the shift register to the storage register
-
+  * Since the storage register has 8 bits, it can control the 7 segments of one single digit plus a dot after it.
+  * But we have 8 digits, how can we use one 8-bit storage register to control all of them? The answer is: we don't.
+Each time we can only control what to show on one digit only. However, if we repeat the process fast enough, even if
+we light up one digit at a time, to human eyes, it still appears that we can show 8 digits concurrently.
 <img src="./assets/how-does-74hc595-shift-register-work.gif"></img>
 
 ### Temperature and Humidty Sensor (SHT31)
