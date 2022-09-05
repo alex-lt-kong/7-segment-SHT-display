@@ -53,7 +53,7 @@ we are only able to light up segment LEDs of one digit at a time, to human eyes,
 can control 8 digits concurrently.
 * If we make the program running slowly, naked eyes can also notice that digits are refreshed one-by-one.
 
-<img src="./assets/how-does-74hc595-shift-register-work.gif"></img>
+<img src="./assets/low-refresh-rate.gif"></img>
 
 * Useful reference [here](https://lastminuteengineers.com/74hc595-shift-register-arduino-tutorial/)
 
