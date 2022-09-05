@@ -1,6 +1,7 @@
 {
   "files.associations": {
     "cstdlib": "c",
-    "*.tcc": "c"
+    "*.tcc": "c",
+    "pthread.h": "c"
   }
 }

@@ -4,6 +4,8 @@ Display real-time temperature and relative humidity on an 8-digit 7-segment LED 
 
 ## Environment and dependency
 
+* `cURL`: `apt-get install libcurl4-gnutls-dev`
+
 * New `LD_LIBRARY_PATH`: `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/`.
 
 * Enable `I2C interface` with `raspi-config`.
@@ -25,10 +27,27 @@ make install
 ## Hardware
 
 ### 8-digit 7-segment Digital Tube
-<img src="./images/7seg-digital-tube.jpg"></img>
+<img src="./assets/7seg-digital-tube.jpg"></img>
+
+#### How does a 74HC595 shift register work
+
+* Have you ever found yourself wanting to control lots of LED’s? Well, you could
+wire up few sensors to Raspberry Pi GPIO pins, but you would rapidly start to run out of pins.
+
+* The solution for this is to use a 'Shift Register'. The 595 essentially controls eight separate
+output pins, using only three input pins. 
+
+* A digital tube has two 8-bit registers: a shift register and a storage register. The trick is:
+  * We use one pin (a.k.a. Clock or SCLK) to provide regular pulse, telling the 595 how frequent
+data are supplied.
+  * We use another pin (a.k.a data or DI0) to write 0's and 1's to the shift register by following the frequency
+of the SCLK pin.
+  * We use a third pin (a.k.a latch or RCLK) to copy what is in the shift register to the storage register
+
+<img src="./assets/how-does-74hc595-shift-register-work.gif"></img>
 
 ### Temperature and Humidty Sensor (SHT31)
-<img src="./images/temp-humidity-sensor.jpg"></img>
+<img src="./assets/temp-humidity-sensor.jpg"></img>
 
 ### Installation
-<img src="./images/installation.jpg"></img>
+<img src="./assets/installation.jpg"></img>
