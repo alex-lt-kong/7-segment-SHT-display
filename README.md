@@ -24,6 +24,9 @@ make
 make install
 ```
 
+* `$SEVEN_SSD_TELEMETRY_ENDPOINT` should be set to a RESTful API endpoint if data collected need to be reported to a
+central server.
+
 ## Hardware
 
 ### 8-digit 7-segment Digital Tube

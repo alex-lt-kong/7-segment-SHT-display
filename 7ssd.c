@@ -1,6 +1,7 @@
 // This is a brute-force translation of https://github.com/shrikantpatnaik/Pi7SegPy/blob/master/Pi7SegPy.py
 #include <curl/curl.h>
 #include <linux/i2c-dev.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <pigpio.h>
@@ -36,8 +37,19 @@ void signal_handler(int signum) {
 void* thread_report_sensor_readings(void* payload) {
   syslog(LOG_INFO, "thread_report_sensor_readings() started");
   struct SensorPayload* pl = (struct SensorPayload*)payload;
+  char envvar[] = "SEVEN_SSD_TELEMETRY_ENDPOINT";
+  if(!getenv(envvar)) {
+    syslog(LOG_INFO, "The environment variable [%s] was not found, thread_report_sensor_readings() quits gracefully.", envvar);
+    return NULL;
+  }
+  char telemetry_endpoint[PATH_MAX];
+  if(snprintf(telemetry_endpoint, PATH_MAX, "%s", getenv(envvar)) >= PATH_MAX){
+    syslog(LOG_INFO, "PATH_MAX too small for %s, thread_report_sensor_readings() quits gracefully.", envvar);
+    return NULL;
+  }
   uint16_t iter = 0;
-  char url[1024];
+  char url[PATH_MAX];
+  
   curl_global_init(CURL_GLOBAL_DEFAULT);
   while (!done) {
     sleep(1);
@@ -50,11 +62,7 @@ void* thread_report_sensor_readings(void* payload) {
     CURLcode res;
     curl = curl_easy_init();
     if(curl) {
-      sprintf(
-        url,
-        "https://apps.sz.lan/telemetry/sensor/?device_name=rpi-aircon&"
-        "device_token=2xSxGHRjTAHEN2AdNzeBijX4zQSBua&data_type=temperature&"
-        "reading=%.2lf&sampling_point=flowerbed", pl->temp_celsius);
+      snprintf(url, PATH_MAX, telemetry_endpoint, pl->temp_celsius);
       curl_easy_setopt(curl, CURLOPT_URL, url);  
       /* Perform the request, res will get the return code */
       res = curl_easy_perform(curl);
@@ -70,6 +78,7 @@ void* thread_report_sensor_readings(void* payload) {
   }
   curl_global_cleanup();
   syslog(LOG_INFO, "Stop signal received, thread_report_sensor_readings() quits gracefully.");
+  return NULL;
 }
 
 void* thread_get_sensor_readings(void* payload) {
@@ -113,6 +122,7 @@ void* thread_get_sensor_readings(void* payload) {
     close(fd);
   }
   syslog(LOG_INFO, "Stop signal received, thread_get_sensor_readings() quits gracefully.");
+  return NULL;
 }
 
 void* thread_set_7seg_display(void* payload) {
