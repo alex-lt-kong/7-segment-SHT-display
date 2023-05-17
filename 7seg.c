@@ -62,30 +62,30 @@ uint8_t handle_dot(uint8_t value, bool turn_it_on) {
 }
 
 const uint8_t available_chars[] = {
-  // controls on/off of 7-segment led + dot. A bit is 0 means to turn that segment led on.
-  0b11000000, // 0
-  0b11111001, // 1
-  0b10100100, // 2
-  0b10110000, // 3
-  0b10011001, // 4
-  0b10010010, // 5
-  0b10000010, // 6
-  0b11111000, // 7
-  0b10000000, // 8
-  0b10010000, // 9
-  0b11111111, // empty
-};
+    // controls on/off of 7-segment led + dot. A bit is 0 means to turn that segment led on.
+    0b11000000, // 0
+    0b11111001, // 1
+    0b10100100, // 2
+    0b10110000, // 3
+    0b10011001, // 4
+    0b10010010, // 5
+    0b10000010, // 6
+    0b11111000, // 7
+    0b10000000, // 8
+    0b10010000, // 9
+    0b11111111, // empty
+    };
 
 int show(uint8_t* values, bool* with_dots) {
 
-  for (int i = 0; i < DIGIT_COUNT; ++i) {
-    write_data_to_register(handle_dot(available_chars[values[i]], with_dots[i]) << 8 | 1 << (DIGIT_COUNT-1-i));      
-    // we pass a total of 16 bits to show():
-    // 1st byte: controls on/off of 7-segment led + dot. A bit is 0 means to turn that segment led on.
-    // 2nd byte: controls which digit the above 7-segment definiton should be applied to.
-    gpioWrite(latch, PI_HIGH);
-    gpioWrite(latch, PI_LOW); 
-    usleep(500);
-  }
-  return 0;
+    for (int i = 0; i < DIGIT_COUNT; ++i) {
+        write_data_to_register(handle_dot(available_chars[values[i]], with_dots[i]) << 8 | 1 << (DIGIT_COUNT-1-i));      
+        // we pass a total of 16 bits to show():
+        // 1st byte: controls on/off of 7-segment led + dot. A bit is 0 means to turn that segment led on.
+        // 2nd byte: controls which digit the above 7-segment definiton should be applied to.
+        gpioWrite(latch, PI_HIGH);
+        gpioWrite(latch, PI_LOW); 
+        usleep(500);
+    }
+    return 0;
 }
