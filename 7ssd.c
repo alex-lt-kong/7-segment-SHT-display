@@ -1,4 +1,4 @@
-// This is a brute-force translation of https://github.com/shrikantpatnaik/Pi7SegPy/blob/master/Pi7SegPy.py
+#define _GNU_SOURCE
 #include <curl/curl.h>
 #include <errno.h>
 #include <linux/i2c-dev.h>
@@ -25,10 +25,33 @@ pthread_mutex_t my_mutex;
 
 struct SensorPayload {
     double temp_celsius;
-    double temp_fahrenheit;
     double humidity;
     bool success;
 };
+
+/**
+ * Performs a CRC8 calculation on the supplied values.
+ *
+ * @param data  Pointer to the data to use when calculating the CRC8.
+ * @param len   The number of bytes in 'data'.
+ *
+ * @return The computed CRC8 value.
+ */
+static uint8_t crc8(const uint8_t *data, int len) {
+// Ref: https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L163C4-L194
+
+    const uint8_t POLYNOMIAL = 0x31;
+    uint8_t crc = 0xFF;
+
+    for (int j = len; j; --j) {
+        crc ^= *data++;
+
+        for (int i = 8; i; --i) {
+            crc = (crc & 0x80) ? (crc << 1) ^ POLYNOMIAL : (crc << 1);
+        }
+    }
+    return crc;
+}
 
 void* thread_report_sensor_readings(void* payload) {
     syslog(LOG_INFO, "thread_report_sensor_readings() started");
@@ -85,7 +108,7 @@ void* thread_report_sensor_readings(void* payload) {
             /* always cleanup */
             curl_easy_cleanup(curl);
         } else {
-        syslog(LOG_ERR, "Failed to create curl instance by curl_easy_init().");
+            syslog(LOG_ERR, "Failed to create curl instance by curl_easy_init().");
         }
     }
     curl_global_cleanup();
@@ -96,52 +119,61 @@ void* thread_report_sensor_readings(void* payload) {
 
 void* thread_get_sensor_readings(void* payload) {
     syslog(LOG_INFO, "thread_get_sensor_readings() started");
-    uint32_t fd;
+    int fd;
     struct SensorPayload* pl = (struct SensorPayload*)payload;
-    char *device_path = "/dev/i2c-1";
+    const char device_path[] = "/dev/i2c-1";
     while (!done) {
         for (int i = 0; i < 3; ++i) { // per some specs sheet online, the frequency of DHT31 is 1hz.
             sleep(1); 
             if (done) {break;}
         }
         if((fd = open(device_path, O_RDWR)) < 0) {
-            syslog(LOG_ERR, "Failed to open() device_path [%s], this reading "
+            syslog(LOG_ERR, "Failed to open() device_path [%s], reading "
                 "attempt will be skipped.", device_path);
             sleep(5);
             continue;
         }
         
-        ioctl(fd, I2C_SLAVE, 0x44); // Get I2C device, SHT31 I2C address is 0x44(68)
+        // Get I2C device, SHT31 I2C address is 0x44(68)
+        if (ioctl(fd, I2C_SLAVE, 0x44) != 0) {
+            syslog(LOG_ERR, "Failed to ioctl() device_path [%s]: %d(%s), reading "
+                "attempt will be skipped.", device_path, errno, strerror(errno));
+            sleep(5);
+            continue;
+        }
+        
     
         // Send high repeatability measurement command
         // Command msb, command lsb(0x2C, 0x06)
         uint8_t config[2] = {0x2C, 0x06};
         if (write(fd, config, 2) != 2) {
-            syslog(LOG_ERR, "Failed to write() command to [%s]: %d(%s). This "
+            syslog(LOG_ERR, "Failed to write() command to [%s]: %d(%s), "
                 "reading attempt will be skipped.", device_path, errno,
                 strerror(errno));
-            close(fd);
             sleep(5); 
-            continue;
+            goto err_write_cmd;
         }
 
         // Read 6 bytes of data
         // temp msb, temp lsb, temp CRC, humidity msb, humidity lsb, humidity CRC
-        char data[6] = {0};
+        uint8_t buf[6] = {0};
         if (pthread_mutex_lock(&my_mutex) != 0) {
             syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).",
                 errno, strerror(errno));
-            continue;
+            goto err_mutex_lock;
         }
-        if(read(fd, data, 6) != 6) {
+        if(read(fd, buf, 6) != 6) {
             syslog(LOG_ERR, "Failed to read() values from [%s]: %d(%s). This "
                 "reading attempt will be skipped.", device_path, errno,
                 strerror(errno));
             pl->success = false;
+        } else if (buf[2] != crc8(buf, 2) || buf[5] != crc8(buf + 3, 2)) {
+            syslog(LOG_ERR, "Data read from [%s] but CRC8 failed.", device_path);
+            pl->success = false;
         } else {
-            pl->temp_celsius = (((data[0] * 256) + data[1]) * 175.0) / 65535.0  - 45.0;
-            pl->temp_fahrenheit = (((data[0] * 256) + data[1]) * 315.0) / 65535.0 - 49.0;
-            pl->humidity = (((data[3] * 256) + data[4])) * 100.0 / 65535.0;
+            // Ref: https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L197C8-L227
+            pl->temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0  - 45.0;
+            pl->humidity = (((buf[3] << 3) | buf[4])) * 100.0 / 65535.0;
             pl->success = true;
         }
         if (pthread_mutex_unlock(&my_mutex) != 0) {            
@@ -149,6 +181,8 @@ void* thread_get_sensor_readings(void* payload) {
                 errno, strerror(errno));
             done = 1;
         }
+err_write_cmd:
+err_mutex_lock:
         close(fd);
     }
     syslog(LOG_INFO, "Stop signal received, thread_get_sensor_readings() "
@@ -248,7 +282,6 @@ int main(int argc, char **argv) {
     struct SensorPayload pl;
     pl.humidity = 0;
     pl.temp_celsius = 0;
-    pl.temp_fahrenheit = 0;
     pl.success = false;
 
     if (pthread_mutex_init(&my_mutex, NULL) != 0) {
@@ -271,7 +304,7 @@ int main(int argc, char **argv) {
         goto err_pthread_create;
     }
 
-    for (int i = 0; i < sizeof(tids) / sizeof(tids[0]); ++i) {
+    for (size_t i = 0; i < sizeof(tids) / sizeof(tids[0]); ++i) {
         if (pthread_join(tids[i], NULL) != 0) {
             syslog(LOG_ERR, "pthread_join() failed: %d(%s)", errno,
                 strerror(errno));
