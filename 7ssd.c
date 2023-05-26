@@ -141,8 +141,7 @@ void* thread_get_sensor_readings(void* payload) {
             sleep(5);
             continue;
         }
-        
-    
+
         // Send high repeatability measurement command
         // Command msb, command lsb(0x2C, 0x06)
         uint8_t config[2] = {0x2C, 0x06};
@@ -173,7 +172,7 @@ void* thread_get_sensor_readings(void* payload) {
         } else {
             // Ref: https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L197C8-L227
             pl->temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0  - 45.0;
-            pl->humidity = (((buf[3] << 3) | buf[4])) * 100.0 / 65535.0;
+            pl->humidity = ((625 * ((buf[3] << 8) | buf[4])) >> 12) / 100.0;
             pl->success = true;
         }
         if (pthread_mutex_unlock(&my_mutex) != 0) {            
@@ -240,17 +239,17 @@ static void signal_handler(int signum) {
     done = 1;
 }
 
-void install_signal_handler() {
+int install_signal_handler() {
     // This design canNOT handle more than 99 signal types
     if (_NSIG > 99) {
-        fprintf(stderr, "signal_handler() can't handle more than 99 signals\n");
-        abort();
+        syslog(LOG_ERR, "signal_handler() can't handle more than 99 signals");
+        return -1;
     }
     struct sigaction act;
     // Initialize the signal set to empty, similar to memset(0)
     if (sigemptyset(&act.sa_mask) == -1) {
-        perror("sigemptyset()");
-        abort();
+        syslog(LOG_ERR, "sigemptyset(): %d(%s)", errno, strerror(errno));
+        return -1;
     }
     act.sa_handler = signal_handler;
     /* SA_RESETHAND means we want our signal_handler() to intercept the signal
@@ -260,9 +259,10 @@ void install_signal_handler() {
     //act.sa_flags = 0;
     if (sigaction(SIGINT, &act, 0) == -1 || sigaction(SIGABRT, &act, 0) == -1 ||
         sigaction(SIGTERM, &act, 0) == -1) {
-        perror("sigaction()");
-        abort();
+        syslog(LOG_ERR, "sigaction(): %d(%s)", errno, strerror(errno));
+        return -1;
     }
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -270,15 +270,20 @@ int main(int argc, char **argv) {
     openlog("7ssd.out", LOG_PID | LOG_CONS, 0);
     syslog(LOG_INFO, "%s started\n", argv[0]);
 
-    install_signal_handler();
+
     if (gpioInitialise() < 0) {
         syslog(LOG_ERR, "pigpio initialization failed, program will quit.");
         retval = 1;
         goto err_gpio;
     }
-    
+
+    // signal handler must be installer after gpioInitialise()--perhaps
+    // it installs its signal handler as well...
+    if (install_signal_handler() != 0) {
+        retval = 1;
+        goto err_sig_handler;
+    }
     init_7seg_display();
-    
     struct SensorPayload pl;
     pl.humidity = 0;
     pl.temp_celsius = 0;
@@ -320,6 +325,7 @@ err_pthread_create:
                 strerror(errno));
     }
 err_mutex_init:
+err_sig_handler:
     gpioTerminate();
 err_gpio:
     closelog();
