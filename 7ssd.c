@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/i2c-dev.h>
+#include <netdb.h>
 #include <pigpio.h>
 #include <pthread.h>
 #include <signal.h>
@@ -56,27 +57,39 @@ static uint8_t crc8(const uint8_t *data, int len) {
 void *thread_report_sensor_readings(void *payload) {
   syslog(LOG_INFO, "thread_report_sensor_readings() started");
   struct SensorPayload *pl = (struct SensorPayload *)payload;
-  char envvar[] = "SEVEN_SSD_TELEMETRY_ENDPOINT";
-  if (!getenv(envvar)) {
-    syslog(LOG_INFO,
-           "The environment variable [%s] was not found, "
-           "thread_report_sensor_readings() quits gracefully.",
-           envvar);
+  /* getenv()'s The caller must take care not tomodify this string,
+     since that would change the environment of the process.*/
+  char *endpoint = getenv("SEVEN_SSD_TELEMETRY_ENDPOINT");
+  char *user = getenv("SEVEN_SSD_TELEMETRY_USER");
+  char *location = getenv("SEVEN_SSD_TELEMETRY_LOCATION");
+  char json_data[1024];
+  char timestamp_str[] = "1970-01-01T00:00:00Z";
+  struct tm *utc_time;
+
+  if (!endpoint || !user || !location) {
+    syslog(LOG_INFO, "The environment variables not found, "
+                     "thread_report_sensor_readings() quits gracefully.");
     return NULL;
   }
-  char telemetry_endpoint[PATH_MAX];
-  if (snprintf(telemetry_endpoint, PATH_MAX, "%s", getenv(envvar)) >=
-      PATH_MAX) {
-    syslog(LOG_INFO,
-           "PATH_MAX too small for %s, "
-           "thread_report_sensor_readings() quits gracefully.",
-           envvar);
-    return NULL;
-  }
-  uint16_t iter = 0;
-  char url[PATH_MAX];
+  uint16_t iter = 3000;
 
   curl_global_init(CURL_GLOBAL_DEFAULT);
+
+  CURL *curl;
+  CURLcode res;
+
+  struct curl_slist *headers =
+      curl_slist_append(NULL, "Content-Type: application/json");
+  curl = curl_easy_init();
+  if (!curl) {
+    syslog(LOG_ERR, "curl_easy_init() failed: %d(%s).", errno, strerror(errno));
+    goto err_curl_easy_init;
+  }
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+  curl_easy_setopt(curl, CURLOPT_URL, endpoint);
+  curl_easy_setopt(curl, CURLOPT_USERPWD, user);
+  curl_easy_setopt(curl, CURLOPT_POST, 1L);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   while (!done) {
     sleep(1);
     ++iter;
@@ -84,40 +97,64 @@ void *thread_report_sensor_readings(void *payload) {
       continue;
     }
     iter = 0;
-    CURL *curl;
-    CURLcode res;
-    curl = curl_easy_init();
-    if (curl) {
-      if (pthread_mutex_lock(&my_mutex) != 0) {
-        syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
-               strerror(errno));
-        continue;
-      }
-      snprintf(url, PATH_MAX, telemetry_endpoint, pl->temp_celsius);
-      syslog(LOG_ERR, "RestAPI to call: %s", url);
-      if (pthread_mutex_unlock(&my_mutex) != 0) {
-        syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
-               strerror(errno));
-        done = 1;
-      }
 
-      curl_easy_setopt(curl, CURLOPT_URL, url);
-      /* Perform the request, res will get the return code */
-      res = curl_easy_perform(curl);
-      /* Check for errors */
-      if (res != CURLE_OK)
-        syslog(LOG_ERR, "curl_easy_perform() failed: %s",
-               curl_easy_strerror(res));
+    time_t current_time = time(NULL);
+    if (current_time == ((time_t)-1)) {
+      syslog(LOG_ERR, "Faile to get time: %d(%s). This iteration is skipped",
+             errno, strerror(errno));
+      continue;
+    }
+    /* gmtime()'s return value points to a statically allocated struct which
+       might be overwritten by subse‐ quent calls to any of the date and time
+       functions.*/
+    utc_time = gmtime(&current_time);
+    if (utc_time == NULL) {
+      syslog(LOG_ERR,
+             "Faile to get utc_time: %d(%s). This iteration is skipped", errno,
+             strerror(errno));
+      continue;
+    }
+    strftime(timestamp_str, sizeof(timestamp_str), "%Y-%m-%dT%H:%M:%SZ",
+             utc_time);
 
-      /* always cleanup */
-      curl_easy_cleanup(curl);
-    } else {
-      syslog(LOG_ERR, "Failed to create curl instance by curl_easy_init().");
+    if (pthread_mutex_lock(&my_mutex) != 0) {
+      syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
+             strerror(errno));
+      continue;
+    }
+    snprintf(json_data, sizeof(json_data) / sizeof(json_data[0]),
+             "{\"temp\":%f,\"location\":\"%s\",\"timestamp_utc\":\"%s\"}",
+             pl->temp_celsius, location, timestamp_str);
+    if (pthread_mutex_unlock(&my_mutex) != 0) {
+      syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
+             strerror(errno));
+      done = 1;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(json_data));
+    res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK)
+      syslog(LOG_ERR, "curl_easy_perform() failed: %s",
+             curl_easy_strerror(res));
+    else {
+      syslog(LOG_INFO, "REST endpoint [%s] called", endpoint);
+      long http_response_code;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_response_code);
+      if (http_response_code < 200 || http_response_code >= 300) {
+        syslog(LOG_ERR, "Unexpected HTTP status code: %ld.",
+               http_response_code);
+      }
     }
   }
-  curl_global_cleanup();
   syslog(LOG_INFO, "Stop signal received, "
                    "thread_report_sensor_readings() quits gracefully.");
+
+  curl_easy_cleanup(curl);
+  curl_slist_free_all(headers);
+err_curl_easy_init:
+  curl_global_cleanup();
   return NULL;
 }
 
