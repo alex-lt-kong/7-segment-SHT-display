@@ -60,23 +60,24 @@ void write_data_to_register(uint16_t value) {
 }
 
 uint8_t handle_dot(uint8_t value, bool turn_it_on) {
-  return turn_it_on ? value & 0b01111111 : value;
+  return turn_it_on ? value & 0x7F : value;
+  // 0x7F == 0b01111111
 }
 
 const uint8_t available_chars[] = {
     // controls on/off of 7-segment led + dot. A bit is 0 means to turn that
     // segment led on.
-    0b11000000, // 0
-    0b11111001, // 1
-    0b10100100, // 2
-    0b10110000, // 3
-    0b10011001, // 4
-    0b10010010, // 5
-    0b10000010, // 6
-    0b11111000, // 7
-    0b10000000, // 8
-    0b10010000, // 9
-    0b11111111, // empty
+    0xC0, // 0,     0b11000000
+    0xF9, // 1,     0b11111001
+    0xA4, // 2,     0b10100100
+    0xB0, // 3,     0b10110000
+    0x99, // 4,     0b10011001
+    0x92, // 5,     0b10010010
+    0x82, // 6,     0b10000010
+    0xF8, // 7,     0b11111000
+    0x80, // 8,     0b10000000
+    0x90, // 9,     0b10010000
+    0xFF, // empty, 0b11111111
 };
 
 int show(uint8_t *values, bool *with_dots) {

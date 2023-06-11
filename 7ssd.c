@@ -56,42 +56,47 @@ static uint8_t crc8(const uint8_t *data, int len) {
 
 void *thread_report_sensor_readings(void *payload) {
   syslog(LOG_INFO, "thread_report_sensor_readings() started");
-  struct SensorPayload *pl = (struct SensorPayload *)payload;
+  const struct SensorPayload *pl = (struct SensorPayload *)payload;
   /* getenv()'s The caller must take care not tomodify this string,
      since that would change the environment of the process.*/
-  char *endpoint = getenv("SEVEN_SSD_TELEMETRY_ENDPOINT");
-  char *user = getenv("SEVEN_SSD_TELEMETRY_USER");
-  char *location = getenv("SEVEN_SSD_TELEMETRY_LOCATION");
+  const char *endpoint = getenv("SEVEN_SSD_TELEMETRY_ENDPOINT");
+  const char *user = getenv("SEVEN_SSD_TELEMETRY_USER");
+  const char *location = getenv("SEVEN_SSD_TELEMETRY_LOCATION");
   char json_data[1024];
   char timestamp_str[] = "1970-01-01T00:00:00Z";
   struct tm *utc_time;
 
   if (!endpoint || !user || !location) {
-    syslog(LOG_INFO, "The environment variables not found, "
-                     "thread_report_sensor_readings() quits gracefully.");
+    (void)syslog(LOG_INFO, "The environment variables not found, "
+                           "thread_report_sensor_readings() quits gracefully.");
     return NULL;
   }
-  uint16_t iter = 3000;
 
-  curl_global_init(CURL_GLOBAL_DEFAULT);
+  if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0) {
+    (void)syslog(LOG_ERR, "curl_global_init() failed, "
+                          "thread_report_sensor_readings() quits gracefully.");
+    goto err_curl_global_init;
+  }
 
-  CURL *curl;
-  CURLcode res;
-
-  struct curl_slist *headers =
-      curl_slist_append(NULL, "Content-Type: application/json");
-  curl = curl_easy_init();
+  struct curl_slist *headers = NULL;
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  CURL *curl = curl_easy_init();
   if (!curl) {
-    syslog(LOG_ERR, "curl_easy_init() failed: %d(%s).", errno, strerror(errno));
+    (void)syslog(LOG_ERR, "curl_easy_init() failed: %d(%s).", errno,
+                 strerror(errno));
     goto err_curl_easy_init;
   }
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
-  curl_easy_setopt(curl, CURLOPT_URL, endpoint);
-  curl_easy_setopt(curl, CURLOPT_USERPWD, user);
-  curl_easy_setopt(curl, CURLOPT_POST, 1L);
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  if (curl_easy_setopt(curl, CURLOPT_VERBOSE, 0) != CURLE_OK ||
+      curl_easy_setopt(curl, CURLOPT_URL, endpoint) != CURLE_OK ||
+      curl_easy_setopt(curl, CURLOPT_USERPWD, user) != CURLE_OK ||
+      curl_easy_setopt(curl, CURLOPT_POST, 1L) != CURLE_OK ||
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers) != CURLE_OK) {
+    (void)syslog(LOG_ERR, "curl_easy_setopt() failed.");
+    goto err_curl_easy_setopt;
+  }
+  uint16_t iter = 3600 - 30;
   while (!done) {
-    sleep(1);
+    (void)sleep(1);
     ++iter;
     if (iter < 3600) {
       continue;
@@ -114,47 +119,52 @@ void *thread_report_sensor_readings(void *payload) {
              strerror(errno));
       continue;
     }
-    strftime(timestamp_str, sizeof(timestamp_str), "%Y-%m-%dT%H:%M:%SZ",
-             utc_time);
+    (void)strftime(timestamp_str, sizeof(timestamp_str), "%Y-%m-%dT%H:%M:%SZ",
+                   utc_time);
 
     if (pthread_mutex_lock(&my_mutex) != 0) {
-      syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
-             strerror(errno));
+      (void)syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
+                   strerror(errno));
       continue;
     }
-    snprintf(json_data, sizeof(json_data) / sizeof(json_data[0]),
-             "{\"temp\":%f,\"location\":\"%s\",\"timestamp_utc\":\"%s\"}",
-             pl->temp_celsius, location, timestamp_str);
+    (void)snprintf(json_data, sizeof(json_data) / sizeof(json_data[0]),
+                   "{\"temp\":%f,\"location\":\"%s\",\"timestamp_utc\":\"%s\"}",
+                   pl->temp_celsius, location, timestamp_str);
     if (pthread_mutex_unlock(&my_mutex) != 0) {
-      syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
-             strerror(errno));
+      (void)syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
+                   strerror(errno));
       done = 1;
     }
 
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(json_data));
-    res = curl_easy_perform(curl);
+    if (curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data) != CURLE_OK ||
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
+                         (long)strlen(json_data)) != CURLE_OK) {
+      (void)syslog(LOG_ERR, "curl_easy_setopt() failed.");
+    }
+    CURLcode res = curl_easy_perform(curl);
 
     if (res != CURLE_OK)
       syslog(LOG_ERR, "curl_easy_perform() failed: %s",
              curl_easy_strerror(res));
     else {
-      syslog(LOG_INFO, "REST endpoint [%s] called", endpoint);
+      (void)syslog(LOG_INFO, "REST endpoint [%s] called", endpoint);
       long http_response_code;
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_response_code);
       if (http_response_code < 200 || http_response_code >= 300) {
-        syslog(LOG_ERR, "Unexpected HTTP status code: %ld.",
-               http_response_code);
+        (void)syslog(LOG_ERR, "Unexpected HTTP status code: %ld.",
+                     http_response_code);
       }
     }
   }
   syslog(LOG_INFO, "Stop signal received, "
                    "thread_report_sensor_readings() quits gracefully.");
 
-  curl_easy_cleanup(curl);
-  curl_slist_free_all(headers);
+err_curl_easy_setopt:
+  (void)curl_slist_free_all(headers);
+  (void)curl_easy_cleanup(curl);
 err_curl_easy_init:
-  curl_global_cleanup();
+  (void)curl_global_cleanup();
+err_curl_global_init:
   return NULL;
 }
 
@@ -243,9 +253,9 @@ void *thread_get_sensor_readings(void *payload) {
 
 void *thread_set_7seg_display(void *payload) {
   syslog(LOG_INFO, "thread_set_7seg_display() started.");
-  struct SensorPayload *pl = (struct SensorPayload *)payload;
+  const struct SensorPayload *pl = (struct SensorPayload *)payload;
   init_7seg_display();
-  uint8_t vals[DIGIT_COUNT];
+  uint8_t vals[DIGIT_COUNT] = {0};
   bool dots[DIGIT_COUNT] = {0, 0, 1, 0, 0, 0, 1, 0};
   uint32_t interval = 0;
   while (!done) {
@@ -317,7 +327,7 @@ used again. `man sigaction` describes more possible sa_flags. */
   return 0;
 }
 
-int main(int argc, char **argv) {
+int main(__attribute__((unused)) int argc, char **argv) {
   int retval = 0;
   openlog("7ssd.out", LOG_PID | LOG_CONS, 0);
   syslog(LOG_INFO, "%s started\n", argv[0]);
