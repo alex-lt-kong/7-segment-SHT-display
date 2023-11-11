@@ -1,33 +1,17 @@
-#define _GNU_SOURCE
+#include "global_vars.h"
+
 #include <curl/curl.h>
+#include <iotctrl/7segment-display.h>
+
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <linux/i2c-dev.h>
-#include <netdb.h>
-#include <pigpio.h>
 #include <pthread.h>
-#include <signal.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <syslog.h>
 #include <unistd.h>
-
-#include "7seg.c"
-
-volatile sig_atomic_t done = 0;
-// No, we should not define my_mytex as volatile.
-pthread_mutex_t my_mutex;
-
-struct SensorPayload {
-  double temp_celsius;
-  double humidity;
-  bool success;
-};
 
 /**
  * Performs a CRC8 calculation on the supplied values.
@@ -170,9 +154,22 @@ err_curl_global_init:
 
 void *thread_get_sensor_readings(void *payload) {
   syslog(LOG_INFO, "thread_get_sensor_readings() started");
+  // TODO: move to JSON config
+  const struct iotctrl_7seg_display_connection conn = {.display_digit_count = 8,
+                                                       .data_pin_num = 22,
+                                                       .clock_pin_num = 11,
+                                                       .latch_pin_num = 18,
+                                                       .chain_num = 2};
   int fd;
   struct SensorPayload *pl = (struct SensorPayload *)payload;
   const char device_path[] = "/dev/i2c-1";
+
+  if (iotctrl_init_display("/dev/gpiochip0", conn) != 0) {
+    syslog(LOG_ERR, "iotctrl_init_display() failed, "
+                    "thread_get_sensor_readings() won't start");
+    return NULL;
+  }
+
   while (!done) {
     for (int i = 0; i < 3; ++i) { // per some specs sheet online,
       // the frequency of DHT31 is 1hz.
@@ -236,6 +233,8 @@ void *thread_get_sensor_readings(void *payload) {
       pl->temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0 - 45.0;
       pl->humidity = ((625 * ((buf[3] << 8) | buf[4])) >> 12) / 100.0;
       pl->success = true;
+      iotctrl_update_value_two_four_digit_floats((float)pl->temp_celsius,
+                                                 (float)pl->humidity);
     }
     if (pthread_mutex_unlock(&my_mutex) != 0) {
       syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
@@ -246,150 +245,9 @@ void *thread_get_sensor_readings(void *payload) {
   err_mutex_lock:
     close(fd);
   }
+
+  iotctrl_finalize_7seg_display();
   syslog(LOG_INFO, "Stop signal received, thread_get_sensor_readings() "
                    "quits gracefully.");
   return NULL;
-}
-
-void *thread_set_7seg_display(void *payload) {
-  syslog(LOG_INFO, "thread_set_7seg_display() started.");
-  const struct SensorPayload *pl = (struct SensorPayload *)payload;
-  init_7seg_display();
-  uint8_t vals[DIGIT_COUNT] = {0};
-  bool dots[DIGIT_COUNT] = {0, 0, 1, 0, 0, 0, 1, 0};
-  uint32_t interval = 0;
-  while (!done) {
-    ++interval;
-    if (pthread_mutex_lock(&my_mutex) != 0) {
-      syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
-             strerror(errno));
-      continue;
-    }
-    if (interval > 16 && pl->success == true) {
-      int temp_celsius = pl->temp_celsius * 10;
-      int humidity = pl->humidity * 10;
-      vals[0] = 10;
-      vals[1] = temp_celsius % 1000 / 100;
-      vals[2] = temp_celsius % 100 / 10;
-      vals[3] = temp_celsius % 10;
-      vals[4] = humidity % 10000 / 1000;
-      if (vals[4] == 0) {
-        vals[4] = 10;
-      }
-      vals[5] = humidity % 1000 / 100;
-      vals[6] = humidity % 100 / 10;
-      vals[7] = humidity % 10;
-      interval = 0;
-    }
-    if (pthread_mutex_unlock(&my_mutex) != 0) {
-      syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,
-             strerror(errno));
-      done = 1;
-    }
-    show(vals, dots);
-  }
-
-  syslog(LOG_INFO, "thread_set_7seg_display() quits gracefully.");
-  return NULL;
-}
-
-static void signal_handler(int signum) {
-  char msg[] = "Signal [  ] caught\n";
-  msg[8] = '0' + (char)(signum / 10);
-  msg[9] = '0' + (char)(signum % 10);
-  write(STDIN_FILENO, msg, strlen(msg));
-  done = 1;
-}
-
-int install_signal_handler() {
-  // This design canNOT handle more than 99 signal types
-  if (_NSIG > 99) {
-    syslog(LOG_ERR, "signal_handler() can't handle more than 99 signals");
-    return -1;
-  }
-  struct sigaction act;
-  // Initialize the signal set to empty, similar to memset(0)
-  if (sigemptyset(&act.sa_mask) == -1) {
-    syslog(LOG_ERR, "sigemptyset(): %d(%s)", errno, strerror(errno));
-    return -1;
-  }
-  act.sa_handler = signal_handler;
-  /* SA_RESETHAND means we want our signal_handler() to intercept the
-signal once. If a signal is sent twice, the default signal handler will be
-used again. `man sigaction` describes more possible sa_flags. */
-  act.sa_flags = SA_RESETHAND;
-  // act.sa_flags = 0;
-  if (sigaction(SIGINT, &act, 0) == -1 || sigaction(SIGABRT, &act, 0) == -1 ||
-      sigaction(SIGTERM, &act, 0) == -1) {
-    syslog(LOG_ERR, "sigaction(): %d(%s)", errno, strerror(errno));
-    return -1;
-  }
-  return 0;
-}
-
-int main(__attribute__((unused)) int argc, char **argv) {
-  int retval = 0;
-  openlog("7ssd.out", LOG_PID | LOG_CONS, 0);
-  syslog(LOG_INFO, "%s started\n", argv[0]);
-
-  if (gpioInitialise() < 0) {
-    syslog(LOG_ERR, "pigpio initialization failed, program will quit.");
-    retval = 1;
-    goto err_gpio;
-  }
-
-  // signal handler must be installer after gpioInitialise()--perhaps
-  // it installs its signal handler as well...
-  if (install_signal_handler() != 0) {
-    retval = 1;
-    goto err_sig_handler;
-  }
-  init_7seg_display();
-  struct SensorPayload pl;
-  pl.humidity = 0;
-  pl.temp_celsius = 0;
-  pl.success = false;
-
-  if (pthread_mutex_init(&my_mutex, NULL) != 0) {
-    syslog(LOG_ERR,
-           "pthread_mutex_init() failed: %d(%s), "
-           "program will quit.",
-           errno, strerror(errno));
-    retval = 1;
-    goto err_mutex_init;
-  }
-
-  pthread_t tids[3];
-  if (pthread_create(&tids[0], NULL, thread_get_sensor_readings, &pl) != 0 ||
-      pthread_create(&tids[1], NULL, thread_report_sensor_readings, &pl) != 0 ||
-      pthread_create(&tids[2], NULL, thread_set_7seg_display, &pl) != 0) {
-    syslog(LOG_ERR,
-           "pthread_create() failed: %d(%s), "
-           "program will quit.",
-           errno, strerror(errno));
-    retval = 1;
-    done = 1;
-    goto err_pthread_create;
-  }
-
-  for (size_t i = 0; i < sizeof(tids) / sizeof(tids[0]); ++i) {
-    if (pthread_join(tids[i], NULL) != 0) {
-      syslog(LOG_ERR, "pthread_join() failed: %d(%s)", errno, strerror(errno));
-      retval = 1;
-    }
-  }
-
-  syslog(LOG_INFO, "Program quits gracefully.");
-err_pthread_create:
-  if (pthread_mutex_destroy(&my_mutex) != 0) {
-    // But there is nothing else we can do on this.
-    syslog(LOG_ERR, "pthread_mutex_destroy() failed: %d(%s)", errno,
-           strerror(errno));
-  }
-err_mutex_init:
-err_sig_handler:
-  gpioTerminate();
-err_gpio:
-  closelog();
-  return retval;
 }
