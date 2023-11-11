@@ -4,11 +4,7 @@
 #include "global_vars.h"
 
 #include <errno.h>
-#include <limits.h>
-//#include <netdb.h>
 #include <pthread.h>
-#include <stdint.h>
-//#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
@@ -52,14 +48,6 @@ int main(__attribute__((unused)) int argc, char **argv) {
   openlog("temp-and-humidity-monitor", LOG_PID | LOG_CONS, 0);
   syslog(LOG_INFO, "%s started\n", argv[0]);
 
-  /*if (gpioInitialise() < 0) {
-    syslog(LOG_ERR, "pigpio initialization failed, program will quit.");
-    retval = 1;
-    goto err_gpio;
-  }*/
-
-  // signal handler must be installer after gpioInitialise()--perhaps
-  // it installs its signal handler as well...
   if (install_signal_handler() != 0) {
     retval = 1;
     goto err_sig_handler;
@@ -70,9 +58,7 @@ int main(__attribute__((unused)) int argc, char **argv) {
   pl.success = false;
 
   if (pthread_mutex_init(&my_mutex, NULL) != 0) {
-    syslog(LOG_ERR,
-           "pthread_mutex_init() failed: %d(%s), "
-           "program will quit.",
+    syslog(LOG_ERR, "pthread_mutex_init() failed: %d(%s), program will quit.",
            errno, strerror(errno));
     retval = 1;
     goto err_mutex_init;
@@ -104,8 +90,6 @@ err_pthread_create:
   }
 err_mutex_init:
 err_sig_handler:
-  // gpioTerminate();
-  // err_gpio:
   closelog();
   return retval;
 }
