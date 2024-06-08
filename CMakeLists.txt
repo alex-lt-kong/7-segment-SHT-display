@@ -14,4 +14,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 include(cmake/compiler-flags.cmake)
 include(cmake/sanitizers.cmake)
 
+# Make __FILE__ relative to project root directory instead of absolute directory of the build OS.
+add_compile_options(-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.)
+
 add_subdirectory(src)

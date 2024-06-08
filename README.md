@@ -1,10 +1,12 @@
 # Temperature and humidity monitor
 
-Display real-time temperature and relative humidity on an 8-digit 7-segment LED display (digital tube) from an SHT31 sensor
+Display real-time temperature and relative humidity on an 8-digit 7-segment
+LED display (digital tube) from an SHT31 sensor
 
 ## Environment and dependency
 
-* `cURL`: `apt-get install libcurl4-gnutls-dev`
+* `cURL`: `apt install libcurl4-gnutls-dev`
+* JSON: `apt install libjson-c-dev`
 * [libiotctrl](https://github.com/alex-lt-kong/libiotctrl): GPIO support
 * Enable `I2C interface` with `raspi-config`.
 * Check status of `I2C` device with `dmesg | grep i2c`.

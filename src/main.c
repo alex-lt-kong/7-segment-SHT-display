@@ -2,9 +2,12 @@
 
 #include "event_loops.h"
 #include "global_vars.h"
+#include "utils.h"
 
 #include <errno.h>
+#include <getopt.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
@@ -42,18 +45,49 @@ used again. `man sigaction` describes more possible sa_flags. */
   }
   return 0;
 }
+void print_usage(const char *binary_name) {
+
+  printf("Usage: %s [OPTION]\n\n", binary_name);
+
+  printf("Options:\n"
+         "  --help,        -h        Display this help and exit\n"
+         "  --config-path, -c        Path of JSON format configuration file\n");
+}
+
+const char *parse_args(int argc, char *argv[]) {
+  static struct option long_options[] = {
+      {"config-path", required_argument, 0, 'c'},
+      {"help", optional_argument, 0, 'h'},
+      {0, 0, 0, 0}};
+  int opt, option_idx = 0;
+  while ((opt = getopt_long(argc, argv, "c:h", long_options, &option_idx)) !=
+         -1) {
+    switch (opt) {
+    case 'c':
+      // optarg it is a pointer into the original argv array
+      return optarg;
+    }
+  }
+  print_usage(argv[0]);
+  _exit(1);
+}
 
 int main(__attribute__((unused)) int argc, char **argv) {
-  int retval = 0;
-  openlog("temp-and-humidity-monitor", LOG_PID | LOG_CONS, 0);
-  syslog(LOG_INFO, "%s started\n", argv[0]);
+  int retval = 0, r;
 
-  if (install_signal_handler() != 0) {
+  const char *config_path = parse_args(argc, argv);
+  load_values_from_json(config_path);
+  openlog(PROGRAM_NAME, LOG_PID | LOG_CONS, LOG_USER);
+  syslog(LOG_INFO, "%s started", PROGRAM_NAME);
+
+  if ((r = install_signal_handler()) != 0) {
     retval = 1;
+    syslog(LOG_ERR, "%s.%d: install_signal_handler() failed, retval: %d",
+           __FILE__, __LINE__, r);
     goto err_sig_handler;
   }
   struct SensorPayload pl;
-  pl.humidity = 0;
+  pl.relative_humidity = 0;
   pl.temp_celsius = 0;
   pl.success = false;
 

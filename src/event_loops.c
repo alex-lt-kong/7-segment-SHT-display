@@ -154,19 +154,27 @@ err_curl_global_init:
 
 void *thread_get_sensor_readings(void *payload) {
   syslog(LOG_INFO, "thread_get_sensor_readings() started");
-  // TODO: move to JSON config
-  const struct iotctrl_7seg_display_connection conn = {.display_digit_count = 8,
-                                                       .data_pin_num = 22,
-                                                       .clock_pin_num = 11,
-                                                       .latch_pin_num = 18,
-                                                       .chain_num = 2};
+  syslog(LOG_INFO, "display_digit_count: %d", gv_display_digit_count);
+  syslog(LOG_INFO, "data_pin_num: %d", gv_data_pin_num);
+  syslog(LOG_INFO, "clock_pin_num: %d", gv_clock_pin_num);
+  syslog(LOG_INFO, "latch_pin_num: %d", gv_latch_pin_num);
+  syslog(LOG_INFO, "chain_num: %d", gv_chain_num);
+  syslog(LOG_INFO, "gv_dht31_device_path: %s", gv_dht31_device_path);
+
+  const struct iotctrl_7seg_display_connection conn = {
+      .display_digit_count = gv_display_digit_count,
+      .data_pin_num = gv_data_pin_num,
+      .clock_pin_num = gv_clock_pin_num,
+      .latch_pin_num = gv_latch_pin_num,
+      .chain_num = gv_chain_num};
   int fd;
   struct SensorPayload *pl = (struct SensorPayload *)payload;
-  const char device_path[] = "/dev/i2c-1";
 
-  if (iotctrl_init_display("/dev/gpiochip0", conn) != 0) {
-    syslog(LOG_ERR, "iotctrl_init_display() failed, "
-                    "thread_get_sensor_readings() won't start");
+  if (iotctrl_init_display(gv_gpiochip_path, conn) != 0) {
+    syslog(LOG_ERR,
+           "%s.%d: iotctrl_init_display() failed, "
+           "thread_get_sensor_readings() won't start",
+           __FILE__, __LINE__);
     return NULL;
   }
 
@@ -178,11 +186,12 @@ void *thread_get_sensor_readings(void *payload) {
         break;
       }
     }
-    if ((fd = open(device_path, O_RDWR)) < 0) {
-      syslog(LOG_ERR,
-             "Failed to open() device_path [%s], reading attempt will be "
-             "skipped.",
-             device_path);
+    if ((fd = open(gv_dht31_device_path, O_RDWR)) < 0) {
+      syslog(
+          LOG_ERR,
+          "%s.%d: Failed to open() device_path [%s], reading attempt will be "
+          "skipped.",
+          __FILE__, __LINE__, gv_dht31_device_path);
       sleep(5);
       continue;
     }
@@ -190,9 +199,9 @@ void *thread_get_sensor_readings(void *payload) {
     // Get I2C device, SHT31 I2C address is 0x44(68)
     if (ioctl(fd, I2C_SLAVE, 0x44) != 0) {
       syslog(LOG_ERR,
-             "Failed to ioctl() device_path [%s]: %d(%s), reading "
+             "%s.%d: Failed to ioctl() device_path [%s]: %d(%s), reading "
              "attempt will be skipped.",
-             device_path, errno, strerror(errno));
+             __FILE__, __LINE__, gv_dht31_device_path, errno, strerror(errno));
       sleep(5);
       continue;
     }
@@ -204,7 +213,7 @@ void *thread_get_sensor_readings(void *payload) {
       syslog(LOG_ERR,
              "Failed to write() command to [%s]: %d(%s), "
              "reading attempt will be skipped.",
-             device_path, errno, strerror(errno));
+             gv_dht31_device_path, errno, strerror(errno));
       sleep(5);
       goto err_write_cmd;
     }
@@ -214,27 +223,41 @@ void *thread_get_sensor_readings(void *payload) {
     // humidity CRC
     uint8_t buf[6] = {0};
     if (pthread_mutex_lock(&my_mutex) != 0) {
-      syslog(LOG_ERR, "pthread_mutex_lock() failed: %d(%s).", errno,
-             strerror(errno));
+      syslog(LOG_ERR, "%s.%d: pthread_mutex_lock() failed: %d(%s).", __FILE__,
+             __LINE__, errno, strerror(errno));
       goto err_mutex_lock;
     }
     if (read(fd, buf, 6) != 6) {
       syslog(LOG_ERR,
-             "Failed to read() values from [%s]: %d(%s). This "
+             "%s.%d: ailed to read() values from [%s]: %d(%s). This "
              "reading attempt will be skipped.",
-             device_path, errno, strerror(errno));
-      pl->success = false;
-    } else if (buf[2] != crc8(buf, 2) || buf[5] != crc8(buf + 3, 2)) {
-      syslog(LOG_ERR, "Data read from [%s] but CRC8 failed.", device_path);
+             __FILE__, __LINE__, gv_dht31_device_path, errno, strerror(errno));
       pl->success = false;
     } else {
-      // Ref:
+      // Reference:
       // https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L197C8-L227
-      pl->temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0 - 45.0;
-      pl->humidity = ((625 * ((buf[3] << 8) | buf[4])) >> 12) / 100.0;
-      pl->success = true;
+      float temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0 - 45.0;
+      float relative_humidity =
+          ((625 * ((buf[3] << 8) | buf[4])) >> 12) / 100.0;
+
+      if (buf[2] != crc8(buf, 2) || buf[5] != crc8(buf + 3, 2)) {
+        syslog(
+            LOG_ERR,
+            "%s.%d: Data read from [%s] but CRC8 failed. Retrieved (erroneous) "
+            "readings are %f (temperature, celsius), %f (relative humidity, "
+            "%%)",
+            __FILE__, __LINE__, gv_dht31_device_path, temp_celsius,
+            relative_humidity);
+        pl->temp_celsius = 888.8;
+        pl->relative_humidity = 888.8;
+        pl->success = false;
+      } else {
+        pl->temp_celsius = temp_celsius;
+        pl->relative_humidity = relative_humidity;
+        pl->success = true;
+      }
       iotctrl_update_value_two_four_digit_floats((float)pl->temp_celsius,
-                                                 (float)pl->humidity);
+                                                 (float)pl->relative_humidity);
     }
     if (pthread_mutex_unlock(&my_mutex) != 0) {
       syslog(LOG_ERR, "pthread_mutex_unlock() failed: %d(%s).", errno,

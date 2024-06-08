@@ -79,4 +79,5 @@ _deps
 # ===== my ignores =====
 #
 #
-build/
+build/*
+settings.json
