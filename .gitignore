@@ -79,5 +79,6 @@ _deps
 # ===== my ignores =====
 #
 #
-build/*
+.cache
+build
 settings.json

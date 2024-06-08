@@ -7,5 +7,6 @@
         "chain_num": 2,
         "gpiochip_path": "/dev/gpiochip0"
     },
-    "dht31_device_path": "/dev/i2c-1"
+    "dht31_device_path": "/dev/i2c-1",
+    "callback_interval_sec": 60
 }
