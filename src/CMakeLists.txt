@@ -3,7 +3,7 @@ add_executable(thm
     global_vars.c
     event_loops.c
     utils.c
-    callback_stdout.c
+    callback_7seg_display.c
 )
 
 target_link_libraries(thm 

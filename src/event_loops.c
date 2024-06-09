@@ -2,9 +2,6 @@
 #include "global_vars.h"
 #include "utils.h"
 
-#include <curl/curl.h>
-#include <iotctrl/7segment-display.h>
-
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
@@ -19,12 +16,19 @@ void *thread_callback() {
   syslog(LOG_INFO,
          "thread_callback() started, callback will be invoked every %d seconds",
          gv_callback_interval_sec);
+  struct CallbackContext ctx;
+  if (!(ctx = callback_init(gv_config_root)).init_success) {
+    SYSLOG_ERR("callback_init() failed, callback event loop will quit");
+    return NULL;
+  }
 
   while (!ev_flag) {
     if (interruptible_sleep_sec(gv_callback_interval_sec) != 0)
       break;
-    callback(gv_readings);
+    callback(gv_readings, &ctx);
   }
+
+  callback_destory(&ctx);
 
   syslog(LOG_INFO, "thread_callback() exited gracefully");
   return NULL;
@@ -32,26 +36,8 @@ void *thread_callback() {
 
 void *thread_get_sensor_readings() {
   syslog(LOG_INFO, "thread_get_sensor_readings() started");
-  syslog(LOG_INFO, "display_digit_count: %d", gv_display_digit_count);
-  syslog(LOG_INFO, "data_pin_num: %d", gv_data_pin_num);
-  syslog(LOG_INFO, "clock_pin_num: %d", gv_clock_pin_num);
-  syslog(LOG_INFO, "latch_pin_num: %d", gv_latch_pin_num);
-  syslog(LOG_INFO, "chain_num: %d", gv_chain_num);
-  syslog(LOG_INFO, "gv_dht31_device_path: %s", gv_dht31_device_path);
 
-  const struct iotctrl_7seg_display_connection conn = {
-      .display_digit_count = gv_display_digit_count,
-      .data_pin_num = gv_data_pin_num,
-      .clock_pin_num = gv_clock_pin_num,
-      .latch_pin_num = gv_latch_pin_num,
-      .chain_num = gv_chain_num};
   int fd;
-
-  if (iotctrl_init_display(gv_gpiochip_path, conn) != 0) {
-    SYSLOG_ERR("iotctrl_init_display() failed, "
-               "thread_get_sensor_readings() won't start");
-    return NULL;
-  }
 
   while (!ev_flag) {
     // per some specs sheet online, the frequency of DHT31 is 1hz.
@@ -121,8 +107,6 @@ void *thread_get_sensor_readings() {
     gv_readings.update_time = time(NULL);
     if (gv_readings.update_time == -1)
       SYSLOG_ERR("Failed to get time(): %d(%s)", errno, strerror(errno));
-    iotctrl_update_value_two_four_digit_floats(
-        (float)gv_readings.temp_celsius, (float)gv_readings.relative_humidity);
 
     if (pthread_mutex_unlock(&gv_sensor_readings_mtx) != 0) {
       SYSLOG_ERR("pthread_mutex_unlock() failed: %d(%s).", errno,
@@ -136,7 +120,6 @@ void *thread_get_sensor_readings() {
     close(fd);
   }
 
-  iotctrl_finalize_7seg_display();
   syslog(LOG_INFO, "Stop signal received, thread_get_sensor_readings() "
                    "quits gracefully.");
   return NULL;
