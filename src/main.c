@@ -45,6 +45,7 @@ used again. `man sigaction` describes more possible sa_flags. */
   }
   return 0;
 }
+
 void print_usage(const char *binary_name) {
 
   printf("Usage: %s [OPTION]\n\n", binary_name);

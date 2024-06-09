@@ -1,6 +1,5 @@
 {
     "7seg_display": {
-        "display_digit_count": 8,
         "data_pin_num": 17,
         "clock_pin_num": 11,
         "latch_pin_num": 18,
