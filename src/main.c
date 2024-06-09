@@ -91,24 +91,23 @@ int main(int argc, char **argv) {
     SYSLOG_ERR("install_signal_handler() failed, retval: %d", r);
     goto err_sig_handler;
   }
-  struct SensorPayload pl;
-  pl.relative_humidity = 0;
-  pl.temp_celsius = 0;
-  pl.success = false;
 
-  if (pthread_mutex_init(&my_mutex, NULL) != 0) {
+  if (pthread_mutex_init(&gv_sensor_readings_mtx, NULL) != 0) {
     SYSLOG_ERR("pthread_mutex_init() failed: %d(%s), program will quit.", errno,
                strerror(errno));
-    retval = 1;
+    retval = -3;
     goto err_mutex_init;
   }
+  gv_readings.temp_celsius = 888.8;
+  gv_readings.relative_humidity = 888.8;
+  gv_readings.update_time = -1;
 
   pthread_t tids[2];
-  if (pthread_create(&tids[0], NULL, thread_get_sensor_readings, &pl) != 0 ||
-      pthread_create(&tids[1], NULL, thread_callback, &pl) != 0) {
+  if (pthread_create(&tids[0], NULL, thread_get_sensor_readings, NULL) != 0 ||
+      pthread_create(&tids[1], NULL, thread_callback, NULL) != 0) {
     SYSLOG_ERR("pthread_create() failed: %d(%s), program will quit.", errno,
                strerror(errno));
-    retval = 1;
+    retval = -4;
     ev_flag = 1;
     goto err_pthread_create;
   }
@@ -116,19 +115,20 @@ int main(int argc, char **argv) {
   for (size_t i = 0; i < sizeof(tids) / sizeof(tids[0]); ++i) {
     if (pthread_join(tids[i], NULL) != 0) {
       SYSLOG_ERR("pthread_join() failed: %d(%s)", errno, strerror(errno));
-      retval = 1;
+      retval = -5;
     }
   }
 
   syslog(LOG_INFO, "Program quits gracefully.");
 err_pthread_create:
-  if (pthread_mutex_destroy(&my_mutex) != 0) {
+  if (pthread_mutex_destroy(&gv_sensor_readings_mtx) != 0) {
     // But there is nothing else we can do on this.
     SYSLOG_ERR("pthread_mutex_destroy() failed: %d(%s)", errno,
                strerror(errno));
   }
 err_mutex_init:
 err_sig_handler:
+  json_object_put(gv_config_root);
 err_config_file:
   closelog();
   return retval;

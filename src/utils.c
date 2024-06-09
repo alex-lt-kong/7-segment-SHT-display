@@ -3,11 +3,11 @@
 
 #include <json-c/json.h>
 
-#include <json-c/json_object.h>
 #include <limits.h>
 #include <linux/limits.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
 
 /**
  * Performs a CRC8 calculation on the supplied values.
@@ -86,8 +86,25 @@ int load_values_from_json(const char *settings_path) {
     retval = -2;
     goto err_invalid_config;
   }
+  // Handle over the root to a global variable, it may be neeeded by callback
+  // functions
+  gv_config_root = root;
+  return retval;
+
 err_invalid_config:
   json_object_put(root);
+  gv_config_root = NULL;
+  root = NULL;
 err_json_parsing:
   return retval;
+}
+
+int interruptible_sleep_sec(int sec) {
+  for (int i = 0; i < sec; ++i) {
+    sleep(1);
+    if (ev_flag) {
+      return 1;
+    }
+  }
+  return 0;
 }
