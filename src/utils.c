@@ -44,12 +44,13 @@ err_json_parsing:
   return retval;
 }
 
-int interruptible_sleep_us(int us) {
+int interruptible_sleep_us(uint64_t us) {
   if (us < 1000 * 1000) {
     usleep(us);
     return 0;
   }
-  for (int i = 0; i < us / (1000 * 1000); ++i) {
+  uint32_t sec = us / (1000 * 1000);
+  for (uint32_t i = 0; i < sec; ++i) {
     sleep(1);
     if (ev_flag) {
       return 1;

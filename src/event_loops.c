@@ -36,7 +36,12 @@ void ev_collect_data() {
       SYSLOG_ERR("collection() encounters a fatal error (ret: %d)", ret);
       break;
     }
-    if (ret > 0 || !pc_ctx.init_success)
+    if (ret > 0)
+      syslog(LOG_WARNING,
+             "collection() encounters a recoverable error (ret: %d), "
+             "post_collection() call will be skipped",
+             ret);
+    if (!pc_ctx.init_success)
       continue;
 
     post_collection(&c_ctx, &pc_ctx);

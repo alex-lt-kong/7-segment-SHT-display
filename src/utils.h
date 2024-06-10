@@ -14,6 +14,6 @@ int load_values_from_json(const char *settings_path);
  * less than 1 second
  * @return 0 if sleep returns after timeout, -1 if it is interrupted by signal
  */
-int interruptible_sleep_us(int sec);
+int interruptible_sleep_us(uint64_t us);
 
 #endif // UTILS_H

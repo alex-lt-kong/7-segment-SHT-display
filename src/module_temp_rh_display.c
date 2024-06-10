@@ -55,10 +55,12 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
     SYSLOG_ERR("Some required values are not provided");
   }
   conn.refresh_rate_hz = 500;
+  syslog(LOG_INFO, "7segment display parameters:");
   syslog(LOG_INFO, "data_pin_num: %d", conn.data_pin_num);
   syslog(LOG_INFO, "clock_pin_num: %d", conn.clock_pin_num);
   syslog(LOG_INFO, "latch_pin_num: %d", conn.latch_pin_num);
   syslog(LOG_INFO, "chain_num: %d", conn.chain_num);
+  syslog(LOG_INFO, "refresh_rate_hz: %d", conn.refresh_rate_hz);
   syslog(LOG_INFO, "gpiochip_path: %s", conn.gpiochip_path);
   struct PostCollectionContext ctx = {.init_success = true, .context = NULL};
   struct iotctrl_7seg_disp_handle *h;
@@ -70,19 +72,19 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
     return ctx;
   }
   ctx.context = h;
+  iotctrl_7seg_disp_turn_on_all_segments(h, 10);
   return ctx;
 }
 
 int post_collection(struct CollectionContext *c_ctx,
                     struct PostCollectionContext *pc_ctx) {
-  if (c_ctx == NULL)
-    return -1;
+
   struct TempAndRHReadings r = ((struct DHT31Handle *)c_ctx->context)->readings;
 
-  __auto_type led = (struct iotctrl_7seg_disp_handle *)pc_ctx->context;
-
-  iotctrl_7seg_disp_update_as_four_digit_float(led, r.temp_celsius, 0);
-  iotctrl_7seg_disp_update_as_four_digit_float(led, r.relative_humidity, 1);
+  struct iotctrl_7seg_disp_handle *h =
+      (struct iotctrl_7seg_disp_handle *)pc_ctx->context;
+  iotctrl_7seg_disp_update_as_four_digit_float(h, r.temp_celsius, 0);
+  iotctrl_7seg_disp_update_as_four_digit_float(h, r.relative_humidity, 1);
   return 0;
 }
 
@@ -186,7 +188,7 @@ int collection(struct CollectionContext *ctx) {
   uint8_t buf[6] = {0};
 
   if (read(fd, buf, 6) != 6) {
-    SYSLOG_ERR("ailed to read() values from [%s]: %d(%s). This "
+    SYSLOG_ERR("Failed to read() values from [%s]: %d(%s). This "
                "reading attempt will be skipped.",
                dht31->device_path, errno, strerror(errno));
     interruptible_sleep_us(5);
@@ -206,6 +208,8 @@ int collection(struct CollectionContext *ctx) {
   dht31->readings.temp_celsius = temp_celsius;
   dht31->readings.relative_humidity = relative_humidity;
   dht31->readings.update_time = time(NULL);
+  syslog(LOG_INFO, "Readings changed to temp: %.1f°C, RH: %.1f%%", temp_celsius,
+         relative_humidity);
   if (dht31->readings.update_time == -1)
     SYSLOG_ERR("Failed to get time(): %d(%s)", errno, strerror(errno));
 

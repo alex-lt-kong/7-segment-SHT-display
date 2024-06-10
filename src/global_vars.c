@@ -7,4 +7,4 @@ volatile sig_atomic_t ev_flag = 0;
 
 json_object *gv_config_root = NULL;
 
-uint32_t gv_collection_event_interval_us = 60;
+uint64_t gv_collection_event_interval_us = 1000 * 1000;

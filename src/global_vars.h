@@ -15,6 +15,6 @@ extern json_object *gv_config_root;
 
 extern volatile sig_atomic_t ev_flag;
 
-extern uint32_t gv_collection_event_interval_us;
+extern uint64_t gv_collection_event_interval_us;
 
 #endif // GLOBAL_VARS_H
