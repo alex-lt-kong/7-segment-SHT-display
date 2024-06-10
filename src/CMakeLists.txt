@@ -3,7 +3,7 @@ add_executable(sdp
     global_vars.c
     event_loops.c
     utils.c
-    module_temp_rh_display.c
+    module_temp_display.c
 )
 
 target_link_libraries(sdp
