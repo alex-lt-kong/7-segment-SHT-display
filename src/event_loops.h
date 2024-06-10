@@ -1,8 +1,8 @@
 #ifndef EVENT_LOOPS_H
 #define EVENT_LOOPS_H
 
-void *thread_callback();
+void *ev_post_collection_handling();
 
-void *thread_get_sensor_readings();
+void *ev_collect_data();
 
 #endif // EVENT_LOOPS_H

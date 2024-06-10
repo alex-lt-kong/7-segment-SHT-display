@@ -7,5 +7,5 @@
         "gpiochip_path": "/dev/gpiochip0"
     },
     "dht31_device_path": "/dev/i2c-1",
-    "callback_interval_sec": 60
+    "collection_event_interval_sec": 1000000
 }

@@ -1,12 +1,12 @@
-add_executable(thm
+add_executable(sdp
     main.c
     global_vars.c
     event_loops.c
     utils.c
-    callback_7seg_display.c
+    module_temp_rh_display.c
 )
 
-target_link_libraries(thm 
+target_link_libraries(sdp
     iotctrl
     gpiod modbus pthread curl json-c
 )

@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.18.4)
 
-project("Temperature and humidity monitor")
+project("sensor data pipeline")
 add_definitions(-DPROJECT_NAME="${PROJECT_NAME}")
+add_definitions(-DPROGRAM_NAME="sensor-data-pipeline")
 
 # Always generate compile_commands.json for clangd, etc.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
