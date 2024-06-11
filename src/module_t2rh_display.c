@@ -109,6 +109,10 @@ struct CollectionContext collection_init(const json_object *config) {
   json_object_object_get_ex(root, "dht31_device_path", &root_dht31_device_path);
   const char *device_path;
 
+  // TODO, the use of json_object_get_string() here could result in segmentfault
+  // if JSON config file format is unexpected. Search the below line to check
+  // out the correct handling
+  // SYSLOG_ERR("d->device_path initialization failed");
   device_path = json_object_get_string(root_dht31_device_path);
   conn->dht31_device_path = malloc(strlen(device_path) + 1);
   if (conn->dht31_device_path == NULL) {
@@ -119,6 +123,10 @@ struct CollectionContext collection_init(const json_object *config) {
 
   json_object *root_dl11_device_path;
   json_object_object_get_ex(root, "dl11_device_path", &root_dl11_device_path);
+  // TODO, the use of json_object_get_string() here could result in segmentfault
+  // if JSON config file format is unexpected. Search the below line to check
+  // out the correct handling
+  // SYSLOG_ERR("d->device_path initialization failed");
   device_path = (char *)json_object_get_string(root_dl11_device_path);
   conn->dl11_device_path = malloc(strlen(device_path) + 1);
   if (conn->dl11_device_path == NULL) {

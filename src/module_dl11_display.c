@@ -61,13 +61,15 @@ struct CollectionContext collection_init(const json_object *config) {
   }
 
   const json_object *root = config;
-  json_object *root_dl11mc_device_path;
-  json_object_object_get_ex(root, "dl11mc_device_path",
-                            &root_dl11mc_device_path);
-  const char *device_path = json_object_get_string(root_dl11mc_device_path);
-  d->device_path = malloc(strlen(device_path) + 1);
+  json_object *root_dl11_device_path;
+  json_object_object_get_ex(root, "dl11_device_path", &root_dl11_device_path);
+  const char *device_path = json_object_get_string(root_dl11_device_path);
+  if (device_path != NULL)
+    d->device_path = malloc(strlen(device_path) + 1);
+  else
+    d->device_path = NULL;
   if (d->device_path == NULL) {
-    SYSLOG_ERR("malloc() failed");
+    SYSLOG_ERR("d->device_path initialization failed");
     goto err_malloc_device_path;
   }
   strcpy(d->device_path, device_path);
@@ -90,8 +92,8 @@ int collection(struct CollectionContext *ctx) {
   const uint8_t sensor_count = 1;
   int16_t temps[sensor_count];
   int16_t temp;
-  if ((res = iotctrl_get_temperature("/dev/ttyUSB0", sensor_count, temps, 0)) !=
-      0) {
+  if ((res = iotctrl_get_temperature(dl11->device_path, sensor_count, temps,
+                                     0)) != 0) {
     temp = 999;
     SYSLOG_ERR("iotctrl_get_temperature() failed, returned %d", res);
   } else {

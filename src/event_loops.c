@@ -21,12 +21,14 @@ void ev_collect_data() {
     SYSLOG_ERR("collection_init() initialization failed");
     goto err_collection_init;
   }
+  syslog(LOG_INFO, "collection_init() returned without errors");
 
   struct PostCollectionContext pc_ctx;
   if (!(pc_ctx = post_collection_init(gv_config_root)).init_success) {
     SYSLOG_ERR(
         "post_collection_init() failed, post collection task will not run");
   }
+  syslog(LOG_INFO, "post_collection_init() returned without errors");
 
   while (!ev_flag) {
     // You need to have sleep at the beginning so that continue branch will also

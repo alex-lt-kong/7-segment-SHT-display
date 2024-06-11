@@ -37,12 +37,17 @@ struct iotctrl_7seg_disp_handle *load_and_init_7seg(const json_object *config) {
   conn.latch_pin_num = json_object_get_int(root_7sd_latch_pin_num);
   conn.chain_num = json_object_get_int(root_7sd_chain_num);
   conn.refresh_rate_hz = json_object_get_int(root_7sd_refresh_rate);
+  // TODO, the use of json_object_get_string() here could result in segmentfault
+  // if JSON config file format is unexpected. Search the below line to check
+  // out the correct handling
+  // SYSLOG_ERR("d->device_path initialization failed");
   strncpy(conn.gpiochip_path, json_object_get_string(root_7sd_gpiochip_path),
           PATH_MAX);
   if (conn.data_pin_num == 0 || conn.clock_pin_num == 0 ||
       conn.latch_pin_num == 0 || conn.chain_num == 0 ||
-      strlen(conn.gpiochip_path) == 0) {
+      conn.refresh_rate_hz == 0 || strlen(conn.gpiochip_path) == 0) {
     SYSLOG_ERR("Some required values are not provided");
+    return NULL;
   }
   syslog(LOG_INFO, "7segment display parameters:");
   syslog(LOG_INFO, "data_pin_num: %d", conn.data_pin_num);
