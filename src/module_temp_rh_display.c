@@ -1,9 +1,10 @@
 #include "global_vars.h"
 #include "module.h"
-#include "module_common.c"
+#include "module_lib.h"
 #include "utils.h"
 
 #include <iotctrl/7segment-display.h>
+#include <iotctrl/dht31.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -28,7 +29,18 @@ struct DHT31Handle {
 };
 
 struct PostCollectionContext post_collection_init(const json_object *config) {
-  return _post_collection_init(config);
+  const json_object *root = config;
+  json_object *root_7sd;
+  json_object_object_get_ex(root, "7seg_display", &root_7sd);
+  struct iotctrl_7seg_disp_handle *h = load_and_init_7seg(root_7sd);
+  struct PostCollectionContext ctx;
+  ctx.init_success = true;
+  if (h == NULL) {
+    ctx.init_success = false;
+    return ctx;
+  }
+  ctx.context = h;
+  return ctx;
 }
 
 int post_collection(struct CollectionContext *c_ctx,
@@ -43,8 +55,8 @@ int post_collection(struct CollectionContext *c_ctx,
   return 0;
 }
 
-void post_collection_destory(struct PostCollectionContext *ctx) {
-  iotctrl_7seg_disp_destory((struct iotctrl_7seg_disp_handle *)(ctx->context));
+void post_collection_destroy(struct PostCollectionContext *ctx) {
+  iotctrl_7seg_disp_destroy((struct iotctrl_7seg_disp_handle *)(ctx->context));
 }
 
 struct CollectionContext collection_init(const json_object *config) {
@@ -60,11 +72,10 @@ struct CollectionContext collection_init(const json_object *config) {
   json_object_object_get_ex(root, "dht31_device_path", &root_sht31_device_path);
   const char *device_path = json_object_get_string(root_sht31_device_path);
   h->device_path = malloc(strlen(device_path) + 1);
-  if (h->device_path == NULL)
-    if (h == NULL) {
-      SYSLOG_ERR("malloc() failed");
-      goto err_malloc_device_path;
-    }
+  if (h->device_path == NULL) {
+    SYSLOG_ERR("malloc() failed");
+    goto err_malloc_device_path;
+  }
   strcpy(h->device_path, device_path);
 
   h->readings.temp_celsius = 888.8;
@@ -81,102 +92,32 @@ err_malloc_handle:
   return ctx;
 }
 
-/**
- * Performs a CRC8 calculation on the supplied values.
- *
- * @param data  Pointer to the data to use when calculating the CRC8.
- * @param len   The number of bytes in 'data'.
- *
- * @return The computed CRC8 value.
- */
-uint8_t crc8(const uint8_t *data, int len) {
-  // Ref:
-  // https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L163C4-L194
-
-  const uint8_t POLYNOMIAL = 0x31;
-  uint8_t crc = 0xFF;
-
-  for (int j = len; j; --j) {
-    crc ^= *data++;
-
-    for (int i = 8; i; --i) {
-      crc = (crc & 0x80) ? (crc << 1) ^ POLYNOMIAL : (crc << 1);
-    }
-  }
-  return crc;
-}
-
 int collection(struct CollectionContext *ctx) {
   struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
-  int fd;
-  if ((fd = open(dht31->device_path, O_RDWR)) < 0) {
-    SYSLOG_ERR("Failed to open() device_path [%s], reading attempt will be "
-               "skipped.",
-               dht31->device_path);
-    interruptible_sleep_us(5);
-    goto err_dht31_io_error;
+  float temp_celsius_t;
+  float relative_humidity_t;
+  int ret = 0;
+  int fd = iotctrl_dht31_init(dht31->device_path);
+  if ((ret = iotctrl_dht31_read(fd, &temp_celsius_t, &relative_humidity_t)) !=
+      0) {
+    goto err_dht31_read;
+    ret = 1;
   }
 
-  // Get I2C device, SHT31 I2C address is 0x44(68)
-  if (ioctl(fd, I2C_SLAVE, 0x44) != 0) {
-    SYSLOG_ERR("Failed to ioctl() device_path [%s]: %d(%s), reading "
-               "attempt will be skipped.",
-               dht31->device_path, errno, strerror(errno));
-    interruptible_sleep_us(5);
-    goto err_dht31_io_error;
-  }
-
-  // Send high repeatability measurement command
-  // Command msb, command lsb(0x2C, 0x06)
-  uint8_t config[2] = {0x2C, 0x06};
-  if (write(fd, config, 2) != 2) {
-    SYSLOG_ERR("Failed to write() command to [%s]: %d(%s), "
-               "reading attempt will be skipped.",
-               dht31->device_path, errno, strerror(errno));
-    interruptible_sleep_us(5);
-    goto err_dht31_io_error;
-  }
-
-  // Read 6 bytes of data
-  // temp msb, temp lsb, temp CRC, humidity msb, humidity lsb,
-  // humidity CRC
-  uint8_t buf[6] = {0};
-
-  if (read(fd, buf, 6) != 6) {
-    SYSLOG_ERR("Failed to read() values from [%s]: %d(%s). This "
-               "reading attempt will be skipped.",
-               dht31->device_path, errno, strerror(errno));
-    interruptible_sleep_us(5);
-    goto err_dht31_io_error;
-  }
-  // Reference:
-  // https://github.com/adafruit/Adafruit_SHT31/blob/bd465b980b838892964d2744d06ffc7e47b6fbef/Adafruit_SHT31.cpp#L197C8-L227
-  float temp_celsius = (((buf[0] << 8) | buf[1]) * 175.0) / 65535.0 - 45.0;
-  float relative_humidity = ((625 * ((buf[3] << 8) | buf[4])) >> 12) / 100.0;
-  if (buf[2] != crc8(buf, 2) || buf[5] != crc8(buf + 3, 2)) {
-    SYSLOG_ERR("Data read from [%s] but CRC8 failed. Retrieved (erroneous) "
-               "readings are %f (temperature, °C), %f (relative humidity, %%)",
-               dht31->device_path, temp_celsius, relative_humidity);
-    goto err_crc_failed;
-  }
-
-  dht31->readings.temp_celsius = temp_celsius;
-  dht31->readings.relative_humidity = relative_humidity;
+  dht31->readings.temp_celsius = temp_celsius_t;
+  dht31->readings.relative_humidity = relative_humidity_t;
   dht31->readings.update_time = time(NULL);
-  syslog(LOG_INFO, "Readings changed to temp: %.1f°C, RH: %.1f%%", temp_celsius,
-         relative_humidity);
+  syslog(LOG_INFO, "Readings changed to temp: %.1f°C, RH: %.1f%%",
+         temp_celsius_t, relative_humidity_t);
   if (dht31->readings.update_time == -1)
     SYSLOG_ERR("Failed to get time(): %d(%s)", errno, strerror(errno));
 
-  return 0;
-
-err_dht31_io_error:
-err_crc_failed:
-  close(fd);
-  return 1;
+err_dht31_read:
+  iotctrl_dht31_destroy(fd);
+  return ret;
 }
 
-void collection_destory(struct CollectionContext *ctx) {
+void collection_destroy(struct CollectionContext *ctx) {
 
   struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
   free(dht31->device_path);

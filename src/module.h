@@ -20,7 +20,7 @@ struct PostCollectionContext post_collection_init(const json_object *config);
 int post_collection(struct CollectionContext *cl_ctx,
                     struct PostCollectionContext *cb_ctx);
 
-void post_collection_destory(struct PostCollectionContext *ctx);
+void post_collection_destroy(struct PostCollectionContext *ctx);
 
 struct CollectionContext collection_init(const json_object *config);
 
@@ -32,6 +32,6 @@ struct CollectionContext collection_init(const json_object *config);
  */
 int collection(struct CollectionContext *ctx);
 
-void collection_destory(struct CollectionContext *ctx);
+void collection_destroy(struct CollectionContext *ctx);
 
 #endif // MODULE_H

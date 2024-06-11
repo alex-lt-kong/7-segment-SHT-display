@@ -1,6 +1,6 @@
 #include "global_vars.h"
 #include "module.h"
-#include "module_common.c"
+#include "module_lib.h"
 #include "utils.h"
 
 #include <iotctrl/7segment-display.h>
@@ -23,7 +23,18 @@ struct DL11MC {
 };
 
 struct PostCollectionContext post_collection_init(const json_object *config) {
-  return _post_collection_init(config);
+  const json_object *root = config;
+  json_object *root_7sd;
+  json_object_object_get_ex(root, "7seg_display", &root_7sd);
+  struct iotctrl_7seg_disp_handle *h = load_and_init_7seg(root_7sd);
+  struct PostCollectionContext ctx;
+  ctx.init_success = true;
+  if (h == NULL) {
+    ctx.init_success = false;
+    return ctx;
+  }
+  ctx.context = h;
+  return ctx;
 }
 
 int post_collection(struct CollectionContext *c_ctx,
@@ -37,8 +48,8 @@ int post_collection(struct CollectionContext *c_ctx,
   return 0;
 }
 
-void post_collection_destory(struct PostCollectionContext *ctx) {
-  iotctrl_7seg_disp_destory((struct iotctrl_7seg_disp_handle *)(ctx->context));
+void post_collection_destroy(struct PostCollectionContext *ctx) {
+  iotctrl_7seg_disp_destroy((struct iotctrl_7seg_disp_handle *)(ctx->context));
 }
 
 struct CollectionContext collection_init(const json_object *config) {
@@ -55,11 +66,10 @@ struct CollectionContext collection_init(const json_object *config) {
                             &root_dl11mc_device_path);
   const char *device_path = json_object_get_string(root_dl11mc_device_path);
   d->device_path = malloc(strlen(device_path) + 1);
-  if (d->device_path == NULL)
-    if (d == NULL) {
-      SYSLOG_ERR("malloc() failed");
-      goto err_malloc_device_path;
-    }
+  if (d->device_path == NULL) {
+    SYSLOG_ERR("malloc() failed");
+    goto err_malloc_device_path;
+  }
   strcpy(d->device_path, device_path);
 
   d->temperature_celsius = 888.8;
@@ -94,7 +104,7 @@ int collection(struct CollectionContext *ctx) {
   return 0;
 }
 
-void collection_destory(struct CollectionContext *ctx) {
+void collection_destroy(struct CollectionContext *ctx) {
   struct DL11MC *dl11 = (struct DL11MC *)ctx->context;
   free(dl11->device_path);
   dl11->device_path = NULL;
