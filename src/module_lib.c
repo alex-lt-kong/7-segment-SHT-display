@@ -15,7 +15,8 @@
 #include <syslog.h>
 #include <unistd.h>
 
-struct iotctrl_7seg_disp_handle *load_and_init_7seg(const json_object *config) {
+struct iotctrl_7seg_disp_handle *
+init_7seg_from_json(const json_object *config) {
   const json_object *root_7sd = config;
   json_object *root_7sd_data_pin_num;
   json_object_object_get_ex(root_7sd, "data_pin_num", &root_7sd_data_pin_num);
@@ -37,10 +38,6 @@ struct iotctrl_7seg_disp_handle *load_and_init_7seg(const json_object *config) {
   conn.latch_pin_num = json_object_get_int(root_7sd_latch_pin_num);
   conn.chain_num = json_object_get_int(root_7sd_chain_num);
   conn.refresh_rate_hz = json_object_get_int(root_7sd_refresh_rate);
-  // TODO, the use of json_object_get_string() here could result in segmentfault
-  // if JSON config file format is unexpected. Search the below line to check
-  // out the correct handling
-  // SYSLOG_ERR("d->device_path initialization failed");
   strncpy(conn.gpiochip_path, json_object_get_string(root_7sd_gpiochip_path),
           PATH_MAX);
   if (conn.data_pin_num == 0 || conn.clock_pin_num == 0 ||

@@ -3,6 +3,6 @@
 
 #include <json-c/json.h>
 
-struct iotctrl_7seg_disp_handle *load_and_init_7seg(const json_object *config);
+struct iotctrl_7seg_disp_handle *init_7seg_from_json(const json_object *config);
 
 #endif // MODULE_LIB_H

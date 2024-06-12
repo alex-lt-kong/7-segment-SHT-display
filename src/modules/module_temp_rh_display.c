@@ -1,7 +1,7 @@
-#include "global_vars.h"
-#include "module.h"
-#include "module_lib.h"
-#include "utils.h"
+#include "../global_vars.h"
+#include "../module.h"
+#include "../module_lib.h"
+#include "../utils.h"
 
 #include <iotctrl/7segment-display.h>
 #include <iotctrl/dht31.h>
@@ -32,7 +32,7 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
   const json_object *root = config;
   json_object *root_7sd;
   json_object_object_get_ex(root, "7seg_display", &root_7sd);
-  struct iotctrl_7seg_disp_handle *h = load_and_init_7seg(root_7sd);
+  struct iotctrl_7seg_disp_handle *h = init_7seg_from_json(root_7sd);
   struct PostCollectionContext ctx;
   ctx.init_success = true;
   if (h == NULL) {

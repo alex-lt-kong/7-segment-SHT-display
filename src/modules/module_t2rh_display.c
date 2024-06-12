@@ -1,7 +1,7 @@
-#include "global_vars.h"
-#include "module.h"
-#include "module_lib.h"
-#include "utils.h"
+#include "../global_vars.h"
+#include "../module.h"
+#include "../module_lib.h"
+#include "../utils.h"
 
 #include <iotctrl/7segment-display.h>
 #include <iotctrl/dht31.h>
@@ -43,13 +43,13 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
   const json_object *root = config;
   json_object *root_7sd;
   json_object_object_get_ex(root, "7seg_display0", &root_7sd);
-  struct iotctrl_7seg_disp_handle *h0 = load_and_init_7seg(root_7sd);
+  struct iotctrl_7seg_disp_handle *h0 = init_7seg_from_json(root_7sd);
   if (h0 == NULL) {
     goto err_h0_error;
   }
 
   json_object_object_get_ex(root, "7seg_display1", &root_7sd);
-  struct iotctrl_7seg_disp_handle *h1 = load_and_init_7seg(root_7sd);
+  struct iotctrl_7seg_disp_handle *h1 = init_7seg_from_json(root_7sd);
   if (h1 == NULL) {
     goto err_h1_error;
   }
@@ -105,32 +105,30 @@ struct CollectionContext collection_init(const json_object *config) {
   }
 
   const json_object *root = config;
-  json_object *root_dht31_device_path;
-  json_object_object_get_ex(root, "dht31_device_path", &root_dht31_device_path);
   const char *device_path;
 
-  // TODO, the use of json_object_get_string() here could result in segmentfault
-  // if JSON config file format is unexpected. Search the below line to check
-  // out the correct handling
-  // SYSLOG_ERR("d->device_path initialization failed");
+  json_object *root_dht31_device_path;
+  json_object_object_get_ex(root, "dht31_device_path", &root_dht31_device_path);
   device_path = json_object_get_string(root_dht31_device_path);
-  conn->dht31_device_path = malloc(strlen(device_path) + 1);
-  if (conn->dht31_device_path == NULL) {
-    SYSLOG_ERR("malloc() failed");
+  if (device_path != NULL)
+    conn->dht31_device_path = malloc(strlen(device_path) + 1);
+  else
+    conn->dht31_device_path = NULL;
+  if (device_path == NULL) {
+    SYSLOG_ERR("dht31_device_path initialization failed");
     goto err_malloc_dht31_path;
   }
   strcpy(conn->dht31_device_path, device_path);
 
   json_object *root_dl11_device_path;
   json_object_object_get_ex(root, "dl11_device_path", &root_dl11_device_path);
-  // TODO, the use of json_object_get_string() here could result in segmentfault
-  // if JSON config file format is unexpected. Search the below line to check
-  // out the correct handling
-  // SYSLOG_ERR("d->device_path initialization failed");
   device_path = (char *)json_object_get_string(root_dl11_device_path);
-  conn->dl11_device_path = malloc(strlen(device_path) + 1);
+  if (device_path != NULL)
+    conn->dl11_device_path = malloc(strlen(device_path) + 1);
+  else
+    conn->dl11_device_path = NULL;
   if (conn->dl11_device_path == NULL) {
-    SYSLOG_ERR("malloc() failed");
+    SYSLOG_ERR("dl11_device_path initialization failed");
     goto err_malloc_dl11_path;
   }
   strcpy(conn->dl11_device_path, device_path);
