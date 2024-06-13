@@ -24,7 +24,7 @@ struct DL11MC {
 
 struct CHContext {
   struct iotctrl_7seg_disp_handle *h;
-  time_t last_notified_at;
+  time_t last_status_update_at;
   uint8_t (*month_days)[2];
   size_t date_count;
   char *external_program;
@@ -51,7 +51,7 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
     goto err_no_effective_dates;
   }
 
-  chctx->last_notified_at = 0;
+  chctx->last_status_update_at = 0;
   chctx->month_days = malloc(sizeof(uint8_t[chctx->date_count][2]));
   if (chctx->month_days == NULL) {
     goto err_malloc_month_days;
@@ -80,7 +80,7 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
     SYSLOG_ERR("external_program initialization failed");
     goto err_external_program;
   }
-  syslog(LOG_INFO, "external_program to be executed on trigger: [%s]",
+  syslog(LOG_INFO, "external_program to execute on threshold crossing: [%s]",
          chctx->external_program);
 
   chctx->h = init_7seg_from_json(root_7sd);
@@ -111,7 +111,8 @@ int post_collection(struct CollectionContext *c_ctx,
   iotctrl_7seg_disp_update_as_four_digit_float(h, r->temperature_celsius, 0);
 
   time_t t = time(NULL);
-  if (t - chctx->last_notified_at < 3600)
+  int interval_sec = 7200;
+  if (t - chctx->last_status_update_at < interval_sec)
     return 0;
 
   struct tm tm = *localtime(&t);
@@ -127,34 +128,37 @@ int post_collection(struct CollectionContext *c_ctx,
     syslog(LOG_INFO,
            "Today (%02d, %02d) is not an effective day, will retry later...",
            tm.tm_mon + 1, tm.tm_mday);
-    chctx->last_notified_at = t;
+    chctx->last_status_update_at = t;
     return 0;
   }
   if (tm.tm_hour < 7 || tm.tm_hour > 21) {
     syslog(LOG_INFO,
-           "Today (%02d, %02d) is an effective day but now is out of effective "
-           "hours, will retry later...",
-           tm.tm_mon + 1, tm.tm_mday);
-    chctx->last_notified_at = t;
+           "Today (%02d, %02d) is an effective day but now (%dhrs) is out of "
+           "effective hours, will retry later...",
+           tm.tm_mon + 1, tm.tm_mday, tm.tm_hour);
+    chctx->last_status_update_at = t;
     return 0;
   }
   float threshold = 28.0;
-  syslog(LOG_INFO,
+  /*syslog(LOG_INFO,
          "Today (%02d, %02d) is an effective day and %dhrs is within effective "
          "hours, checking temperature against threshold %f degrees Celsius",
-         tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, threshold);
+         tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, threshold);*/
   if (r->temperature_celsius <= threshold)
     return 0;
-  syslog(LOG_INFO, "monitor triggered");
-  chctx->last_notified_at = t;
-  int ret = 0;
+  chctx->last_status_update_at = t;
   char external_command[PATH_MAX];
-  snprintf(external_command, PATH_MAX - 1, "%s %.1f", chctx->external_program,
+  snprintf(external_command, PATH_MAX - 1, chctx->external_program,
            r->temperature_celsius);
-  syslog(LOG_INFO, "%s", external_command);
+
+  syslog(LOG_INFO,
+         "Temperature reading (%f°C) is higer than the threshold, about to "
+         "execute the external program: [%s]",
+         r->temperature_celsius, external_command);
+
+  int ret = 0;
   if ((ret = system(external_command)) != 0) {
-    SYSLOG_ERR("Error calling external program: [%s], retval %d",
-               chctx->external_program, ret);
+    SYSLOG_ERR("The external program: returned non-zero value: %d", ret);
     return 1;
   }
   return 0;
