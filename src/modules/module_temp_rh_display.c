@@ -75,9 +75,12 @@ struct CollectionContext collection_init(const json_object *config) {
   // out the correct handling
   // SYSLOG_ERR("d->device_path initialization failed");
   const char *device_path = json_object_get_string(root_sht31_device_path);
-  h->device_path = malloc(strlen(device_path) + 1);
+  if (device_path != NULL)
+    h->device_path = malloc(strlen(device_path) + 1);
+  else
+    h->device_path = NULL;
   if (h->device_path == NULL) {
-    SYSLOG_ERR("malloc() failed");
+    SYSLOG_ERR("h->device_path initialization failed");
     goto err_malloc_device_path;
   }
   strcpy(h->device_path, device_path);
