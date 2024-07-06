@@ -17,6 +17,10 @@ struct PostCollectionContext {
 
 struct PostCollectionContext post_collection_init(const json_object *config);
 
+/**
+ * @brief
+ * @returns the return value is not used for the time being...
+ */
 int post_collection(struct CollectionContext *cl_ctx,
                     struct PostCollectionContext *cb_ctx);
 
