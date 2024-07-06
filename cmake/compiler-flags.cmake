@@ -11,6 +11,7 @@ add_compile_options("-Wall")
 add_compile_options("-Wextra")
 add_compile_options("-pedantic")
 add_compile_options("-O3")
+# add_compile_options("-g")
 # add_compile_options("-Wno-gnu-binary-literal")
 
 #

@@ -1,12 +1,3 @@
 {
-    "7seg_display": {
-        "data_pin_num": 17,
-        "clock_pin_num": 11,
-        "latch_pin_num": 18,
-        "chain_num": 2,
-        "gpiochip_path": "/dev/gpiochip0",
-        "refresh_rate_hz": 10000
-    },
-    "dht31_device_path": "/dev/i2c-1",
     "collection_event_interval_us": 1000000
 }

@@ -18,7 +18,7 @@ void ev_collect_data() {
   struct CollectionContext c_ctx = collection_init(gv_config_root);
   if (!c_ctx.init_success) {
     ev_flag = 1;
-    SYSLOG_ERR("collection_init() initialization failed");
+    SYSLOG_ERR("collection_init() initialization failed, sdp will exit now");
     goto err_collection_init;
   }
   syslog(LOG_INFO, "collection_init() returned without errors");
