@@ -3,19 +3,6 @@
 
 #include <json-c/json.h>
 
-#include <stdbool.h>
-
-struct CollectionContext {
-  // The program will exit on init_success == false
-  bool init_success;
-  void *context;
-};
-
-struct PostCollectionContext {
-  bool init_success;
-  void *context;
-};
-
 /**
  * @brief Initialize a context object to be used by post_collection()
  * @return NULL on failure or a valid context object pointer

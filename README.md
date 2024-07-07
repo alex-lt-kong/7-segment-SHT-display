@@ -10,6 +10,23 @@ Collect data from sensor and send the readings for further processing.
 - Enable `I2C interface` with `raspi-config`.
 - Check status of `I2C` device with `dmesg | grep i2c`.
 
-### Installation
+## Design
 
-<img src="./assets/installation.jpg"></img>
+Essentially this project is a simple framework that does the follow:
+
+```C
+// Initialize two context objects
+void* ctx = collection_init();
+void* pc_ctx = post_collection_init();
+
+while (1) {
+    // The data collected from sensors or whatever peripherals will be saved to ctx
+    collection(ctx);
+    // Then ctx and pc_ctx will be handed to post_collection(), it can display
+    // the data on a 7seg digital tube or upload them to ElasticSearch or whatever.
+    post_collection(ctx, pc_ctx);
+}
+
+post_collection_destroy(pc_ctx);
+collection_destroy(ctx);
+```

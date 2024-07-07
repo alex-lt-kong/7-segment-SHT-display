@@ -28,39 +28,30 @@ struct DHT31Handle {
   char *device_path;
 };
 
-struct PostCollectionContext post_collection_init(const json_object *config) {
+void *post_collection_init(const json_object *config) {
   const json_object *root = config;
   json_object *root_7sd;
   json_object_object_get_ex(root, "7seg_display", &root_7sd);
   struct iotctrl_7seg_disp_handle *h = init_7seg_from_json(root_7sd);
-  struct PostCollectionContext ctx;
-  ctx.init_success = true;
-  if (h == NULL) {
-    ctx.init_success = false;
-    return ctx;
-  }
-  ctx.context = h;
-  return ctx;
+  return h;
 }
 
-int post_collection(struct CollectionContext *c_ctx,
-                    struct PostCollectionContext *pc_ctx) {
+int post_collection(void *c_ctx, void *pc_ctx) {
 
-  struct TempAndRHReadings r = ((struct DHT31Handle *)c_ctx->context)->readings;
+  struct TempAndRHReadings r = ((struct DHT31Handle *)c_ctx)->readings;
 
   struct iotctrl_7seg_disp_handle *h =
-      (struct iotctrl_7seg_disp_handle *)pc_ctx->context;
+      (struct iotctrl_7seg_disp_handle *)pc_ctx;
   iotctrl_7seg_disp_update_as_four_digit_float(h, r.temp_celsius, 0);
   iotctrl_7seg_disp_update_as_four_digit_float(h, r.relative_humidity, 1);
   return 0;
 }
 
-void post_collection_destroy(struct PostCollectionContext *ctx) {
-  iotctrl_7seg_disp_destroy((struct iotctrl_7seg_disp_handle *)(ctx->context));
+void post_collection_destroy(void *ctx) {
+  iotctrl_7seg_disp_destroy((struct iotctrl_7seg_disp_handle *)(ctx));
 }
 
-struct CollectionContext collection_init(const json_object *config) {
-  struct CollectionContext ctx = {.init_success = true, .context = NULL};
+void *collection_init(const json_object *config) {
   struct DHT31Handle *h = malloc(sizeof(struct DHT31Handle));
   if (h == NULL) {
     SYSLOG_ERR("malloc() failed");
@@ -88,19 +79,17 @@ struct CollectionContext collection_init(const json_object *config) {
   h->readings.temp_celsius = 888.8;
   h->readings.relative_humidity = 888.8;
   h->readings.update_time = -1;
-  ctx.context = h;
 
-  return ctx;
+  return h;
 
 err_malloc_device_path:
   free(h);
 err_malloc_handle:
-  ctx.init_success = false;
-  return ctx;
+  return NULL;
 }
 
 int collection(void *ctx) {
-  struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
+  struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx;
   float temp_celsius_t;
   float relative_humidity_t;
   int ret = 0;
@@ -124,9 +113,9 @@ err_dht31_read:
   return ret;
 }
 
-void void collection_destroy(struct CollectionContext *ctx) {
+void collection_destroy(void *ctx) {
 
-  struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
+  struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx;
   free(dht31->device_path);
   dht31->device_path = NULL;
   free(dht31);

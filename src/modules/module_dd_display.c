@@ -35,10 +35,7 @@ struct Twp7segDispHandles {
   struct iotctrl_7seg_disp_handle *h1;
 };
 
-struct PostCollectionContext post_collection_init(const json_object *config) {
-
-  struct PostCollectionContext ctx;
-  ctx.init_success = true;
+void *post_collection_init(const json_object *config) {
 
   const json_object *root = config;
   json_object *root_7sd;
@@ -54,13 +51,12 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
     goto err_h1_error;
   }
 
-  struct Twp7segDispHandles *t = malloc(sizeof(struct Twp7segDispHandles));
-  if (t == NULL) {
+  struct Twp7segDispHandles *ctx = malloc(sizeof(struct Twp7segDispHandles));
+  if (ctx == NULL) {
     goto err_malloc_error;
   }
-  t->h0 = h0;
-  t->h1 = h1;
-  ctx.context = t;
+  ctx->h0 = h0;
+  ctx->h1 = h1;
   return ctx;
 
 err_malloc_error:
@@ -68,17 +64,14 @@ err_malloc_error:
 err_h1_error:
   iotctrl_7seg_disp_destroy(h0);
 err_h0_error:
-  ctx.init_success = false;
-  return ctx;
+  return NULL;
 }
 
-int post_collection(struct CollectionContext *c_ctx,
-                    struct PostCollectionContext *pc_ctx) {
+int post_collection(void *c_ctx, void *pc_ctx) {
 
-  struct T2RHReadings r = ((struct ConnectionInfo *)c_ctx->context)->readings;
+  struct T2RHReadings r = ((struct ConnectionInfo *)c_ctx)->readings;
 
-  struct Twp7segDispHandles *handles =
-      (struct Twp7segDispHandles *)pc_ctx->context;
+  struct Twp7segDispHandles *handles = (struct Twp7segDispHandles *)pc_ctx;
   iotctrl_7seg_disp_update_as_four_digit_float(handles->h0, r.temp_celsius0, 0);
   iotctrl_7seg_disp_update_as_four_digit_float(handles->h0, r.relative_humidity,
                                                1);
@@ -87,17 +80,15 @@ int post_collection(struct CollectionContext *c_ctx,
   return 0;
 }
 
-void post_collection_destroy(struct PostCollectionContext *ctx) {
+void post_collection_destroy(void *ctx) {
 
-  struct Twp7segDispHandles *twoHandles =
-      (struct Twp7segDispHandles *)ctx->context;
+  struct Twp7segDispHandles *twoHandles = (struct Twp7segDispHandles *)ctx;
   iotctrl_7seg_disp_destroy(twoHandles->h0);
   iotctrl_7seg_disp_destroy(twoHandles->h1);
-  free(ctx->context);
+  free(ctx);
 }
 
-struct CollectionContext collection_init(const json_object *config) {
-  struct CollectionContext ctx = {.init_success = true, .context = NULL};
+void *collection_init(const json_object *config) {
   struct ConnectionInfo *conn = malloc(sizeof(struct ConnectionInfo));
   if (conn == NULL) {
     SYSLOG_ERR("malloc() failed");
@@ -136,24 +127,22 @@ struct CollectionContext collection_init(const json_object *config) {
   conn->readings.temp_celsius0 = 888.8;
   conn->readings.temp_celsius1 = 888.8;
   conn->readings.relative_humidity = 888.8;
-  ctx.context = conn;
   syslog(
       LOG_INFO,
       "collection_init() success, dht31_device_path: %s, dl11_device_path: %s",
       conn->dht31_device_path, conn->dl11_device_path);
-  return ctx;
+  return conn;
 
 err_malloc_dl11_path:
   free(conn->dht31_device_path);
 err_malloc_dht31_path:
   free(conn);
 err_malloc_conn:
-  ctx.init_success = false;
-  return ctx;
+  return NULL;
 }
 
 int collection(void *ctx) {
-  struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx->context;
+  struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx;
   float temp_celsius_t;
   float relative_humidity_t;
   int ret = 0;
@@ -186,9 +175,8 @@ err_dht31_read:
   return ret;
 }
 
-void void collection_destroy(struct CollectionContext *ctx) {
-
-  struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx->context;
+void collection_destroy(void *ctx) {
+  struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx;
   free(conn->dht31_device_path);
   conn->dht31_device_path = NULL;
   free(conn->dl11_device_path);
