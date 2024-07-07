@@ -12,7 +12,7 @@ Collect data from sensor and send the readings for further processing.
 
 ## Design
 
-Essentially this project is a simple framework that does the follow:
+Essentially this project is a simple framework that does the following:
 
 ```C
 // Initialize two context objects
