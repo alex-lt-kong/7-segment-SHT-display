@@ -152,7 +152,7 @@ err_malloc_conn:
   return ctx;
 }
 
-int collection(struct CollectionContext *ctx) {
+int collection(void *ctx) {
   struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx->context;
   float temp_celsius_t;
   float relative_humidity_t;
@@ -186,7 +186,7 @@ err_dht31_read:
   return ret;
 }
 
-void collection_destroy(struct CollectionContext *ctx) {
+void void collection_destroy(struct CollectionContext *ctx) {
 
   struct ConnectionInfo *conn = (struct ConnectionInfo *)ctx->context;
   free(conn->dht31_device_path);

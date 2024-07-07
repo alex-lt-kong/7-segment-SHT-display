@@ -56,13 +56,19 @@
 
 #define CALIBRATION_VALUE 4096u
 
-struct INA219Data {
+struct INA219_Context {
   float bus_voltage;
   float shunt_voltage;
   float current;
   float power;
+  // 0: uninitialized, 1: charging, -1: discharging
+  float prev_current;
   float batt_percentage;
+  // batt_percentage_t0 and t0 are reset on start and each time charging status
+  // is changed
   float batt_percentage_t0;
+  // batt_percentage_t0 and t0 are reset on start and each time charging status
+  // is changed
   time_t t0;
 };
 
@@ -121,15 +127,18 @@ err_whatever:
   return -1;
 }
 
-float ina219_get_shunt_voltage_mv(void) {
+int ina219_get_shunt_voltage_mv(float *reading) {
   uint16_t data;
-  ina219_write(_REG_CALIBRATION, CALIBRATION_VALUE);
-  ina219_read(_REG_SHUNTVOLTAGE, &data);
+  if (ina219_write(_REG_CALIBRATION, CALIBRATION_VALUE) < 0)
+    return -1;
+  if (ina219_read(_REG_SHUNTVOLTAGE, &data) < 0)
+    return -2;
   float shunt_voltage = data;
   if (shunt_voltage > 0x8000) {
     shunt_voltage -= 0xFFFF;
   }
-  return shunt_voltage * 0.01;
+  *reading = shunt_voltage * 0.01;
+  return 0;
 }
 
 int ina219_get_bus_voltage_v(float *reading) {
@@ -142,103 +151,112 @@ int ina219_get_bus_voltage_v(float *reading) {
   return 0;
 }
 
-float ina219_get_current_ma(void) {
+int ina219_get_current_ma(float *reading) {
   uint16_t data;
-  ina219_read(_REG_CURRENT, &data);
+  if (ina219_read(_REG_CURRENT, &data) < 0)
+    return -1;
   float currnet_lsb = 0.1;
   float current = (float)data;
   if (current > 0x8000) {
     current -= 0xFFFF;
   }
-  return current * currnet_lsb;
+  *reading = current * currnet_lsb;
+  return 0;
 }
 
-float ina219_get_power_w(void) {
+int ina219_get_power_w(float *reading) {
   uint16_t data;
-  ina219_write(_REG_CALIBRATION, CALIBRATION_VALUE);
-  ina219_read(_REG_POWER, &data);
+  if (ina219_write(_REG_CALIBRATION, CALIBRATION_VALUE) < 0)
+    return -1;
+  if (ina219_read(_REG_POWER, &data) < 0)
+    return -2;
   float power_lsb = 0.002;
   float power = (float)data;
   if (power > 0x8000) {
     power -= 0xFFFF;
   }
-  return power * power_lsb;
+  *reading = power * power_lsb;
+  return 0;
 }
 
-struct PostCollectionContext post_collection_init(const json_object *config) {
-
-  struct PostCollectionContext ctx;
-  ctx.init_success = true;
-  printf("           Datetime,  Curr. (A), Power (W), Batt. (%%), Hourly "
-         "Batt. Usage (%%)\n");
+void *post_collection_init(__attribute__((unused)) const json_object *config) {
+  // We dont need any post_collection context, but to fit in the framework...
+  char *ctx = malloc(sizeof(char));
+  if (ctx == NULL)
+    return NULL;
+  printf("          Timestamp,      Status, Curr. (mA), Power (W), Batt. (%%), "
+         "Hourly use (%%), Remaining (Hrs)\n");
   return ctx;
 }
 
-int post_collection(struct CollectionContext *c_ctx,
-                    struct PostCollectionContext *pc_ctx) {
-  struct INA219Data *dat = (struct INA219Data *)c_ctx->context;
+int post_collection(void *c_ctx, __attribute__((unused)) void *pc_ctx) {
+  struct INA219_Context *ctx = (struct INA219_Context *)c_ctx;
   time_t t;
-  struct tm *timeinfo;
-  char datatime_str[100];
+  // struct tm *timeinfo;
+  char dt_now_str[sizeof("1970-01-01T00:00:00")];
+  char dt_eta_str[sizeof("1970-01-01T00:00:00")];
   time(&t);
-  timeinfo = localtime(&t);
-  strftime(datatime_str, sizeof(datatime_str), "%Y-%m-%dT%H:%M:%S", timeinfo);
-  float hourly_batt_usage = -1;
-  if (dat->batt_percentage_t0 < 0) {
-    dat->batt_percentage_t0 = dat->batt_percentage;
-    hourly_batt_usage = -1;
-  } else {
-    hourly_batt_usage = 3600.0 *
-                        (dat->batt_percentage_t0 - dat->batt_percentage) /
-                        (t - dat->t0 + 1);
-  }
-  printf("%s,     %6.3f,    %6.3f,     %3.1f%%,            ", datatime_str,
-         dat->current / 1000, dat->power, dat->batt_percentage);
+  strftime(dt_now_str, sizeof(dt_now_str), "%Y-%m-%dT%H:%M:%S", localtime(&t));
+  float batt_use_sec =
+      (ctx->batt_percentage_t0 - ctx->batt_percentage) / (t - ctx->t0 + 1);
+  float hourly_batt_use = 3600.0 * batt_use_sec;
 
-  if (hourly_batt_usage < 0) {
-    printf("      <NA>");
-  } else if (dat->current > 0) {
-    printf("<Charging>");
+  printf("%s, %s, %10.0f, %9.3f, %7.1f%%, %13.1f%%, ", dt_now_str,
+         ctx->current > 0 ? "   Charging" : "Discharging", ctx->current,
+         ctx->power, ctx->batt_percentage, hourly_batt_use);
+  if (batt_use_sec != 0) {
+    // If the battery is charging, it is the time until fully charged
+    // If the battery is discharging, it is the time until fully depleted.
+    float remaining_batt_hrs = ctx->batt_percentage / batt_use_sec / 3600.0;
+    // printf("%ld, %lf\n", t, t + batt_use_sec);
+    t += ctx->batt_percentage / batt_use_sec;
+    strftime(dt_eta_str, sizeof(dt_eta_str), "%Y-%m-%dT%H:%M:%S",
+             localtime(&t));
+    printf("%15.1f(%s)", remaining_batt_hrs, dt_eta_str);
   } else {
-    printf("    %3.1f%%", hourly_batt_usage);
+    // Mostly due to sampling with small intervals
+    printf("%15s", "<NA>");
   }
   printf("\n");
   return 0;
 }
 
-void post_collection_destroy(struct PostCollectionContext *ctx) {
-  // free(ctx->context);
-}
+void post_collection_destroy(void *pc_ctx) { free((char *)pc_ctx); }
 
-struct CollectionContext collection_init(const json_object *config) {
-  struct CollectionContext ctx = {.init_success = true, .context = NULL};
-  if (ina219_init() != 0)
-    ctx.init_success = false;
-  struct INA219Data *dat =
-      (struct INA219Data *)malloc(sizeof(struct INA219Data *));
-  if (dat == NULL) {
-    ctx.init_success = false;
+void *collection_init(__attribute__((unused)) const json_object *config) {
+  if (ina219_init() != 0) {
+    SYSLOG_ERR("ina219_init() failed");
+    return NULL;
+  }
+  struct INA219_Context *ctx =
+      (struct INA219_Context *)malloc(sizeof(struct INA219_Context));
+  if (ctx == NULL) {
     return ctx;
   }
-  dat->batt_percentage_t0 = -1;
-  dat->t0 = time(NULL);
-  ctx.context = dat;
+  ctx->prev_current = 0;
+  ctx->t0 = time(NULL);
   return ctx;
 }
 
-int collection(struct CollectionContext *ctx) {
-  struct INA219Data *dat = (struct INA219Data *)ctx->context;
+int collection(void *ctx) {
+  struct INA219_Context *dat = (struct INA219_Context *)ctx;
   if (ina219_get_bus_voltage_v(&dat->bus_voltage) != 0)
     return 1;
-  dat->shunt_voltage = ina219_get_shunt_voltage_mv() / 1000.0;
-  dat->current = ina219_get_current_ma();
-  dat->power = ina219_get_power_w();
+  if (ina219_get_shunt_voltage_mv(&dat->shunt_voltage) != 0)
+    return 1;
+  dat->shunt_voltage /= 1000.0;
+  if (ina219_get_current_ma(&dat->current) != 0)
+    return 1;
+  if (ina219_get_power_w(&dat->power) != 0)
+    return 1;
   dat->batt_percentage = (dat->bus_voltage - 6) / 2.4 * 100;
-  if (dat->current > 0) {
-    // meaning charging
+  if (dat->prev_current * dat->current <= 0) {
+    // dat->prev_charging_status is 0 or
+    // dat->prev_charging_status and dat->current have the same sign
     dat->t0 = time(NULL);
     dat->batt_percentage_t0 = dat->batt_percentage;
   }
+  dat->prev_current = dat->current;
   dat->batt_percentage =
       dat->batt_percentage > 100 ? 100 : dat->batt_percentage;
   dat->batt_percentage = dat->batt_percentage < 0 ? 0 : dat->batt_percentage;
@@ -246,4 +264,4 @@ int collection(struct CollectionContext *ctx) {
   return 0;
 }
 
-void collection_destroy(struct CollectionContext *ctx) { free(ctx->context); }
+void collection_destroy(void *ctx) { free((struct INA219_Context *)ctx); }

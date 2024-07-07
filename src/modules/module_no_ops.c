@@ -21,8 +21,8 @@ struct CollectionContext collection_init(const json_object *config) {
   return ctx;
 }
 
-int collection(struct CollectionContext *ctx) { return 0; }
+int collection(void *ctx) { return 0; }
 
-void collection_destroy(struct CollectionContext *ctx) {
+void void collection_destroy(struct CollectionContext *ctx) {
   // free(ctx->context);
 }

@@ -99,7 +99,7 @@ err_malloc_handle:
   return ctx;
 }
 
-int collection(struct CollectionContext *ctx) {
+int collection(void *ctx) {
   struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
   float temp_celsius_t;
   float relative_humidity_t;
@@ -124,7 +124,7 @@ err_dht31_read:
   return ret;
 }
 
-void collection_destroy(struct CollectionContext *ctx) {
+void void collection_destroy(struct CollectionContext *ctx) {
 
   struct DHT31Handle *dht31 = (struct DHT31Handle *)ctx->context;
   free(dht31->device_path);

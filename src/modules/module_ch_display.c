@@ -206,7 +206,7 @@ err_malloc_handle:
   return ctx;
 }
 
-int collection(struct CollectionContext *ctx) {
+int collection(void *ctx) {
   struct DL11MC *dl11 = (struct DL11MC *)ctx->context;
   int res;
   const uint8_t sensor_count = 1;
@@ -226,7 +226,7 @@ int collection(struct CollectionContext *ctx) {
   return 0;
 }
 
-void collection_destroy(struct CollectionContext *ctx) {
+void void collection_destroy(struct CollectionContext *ctx) {
   struct DL11MC *dl11 = (struct DL11MC *)ctx->context;
   free(dl11->device_path);
   dl11->device_path = NULL;

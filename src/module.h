@@ -16,45 +16,43 @@ struct PostCollectionContext {
   void *context;
 };
 
-struct PostCollectionContext post_collection_init(const json_object *config);
+/**
+ * @brief Initialize a context object to be used by post_collection()
+ * @return NULL on failure or a valid context object pointer
+ */
+void *post_collection_init(const json_object *config);
 
 /**
  * @brief
- * @param cl_ctx The CollectionContext pointer. It is owned by the function
- * caller, i.e., the ev_collect_data() event loop
- * @param cb_ctx The PostCollectionContext pointer. It is owned by the function
- * caller, i.e., the ev_collect_data() event loop
+ * @param ctx The CollectionContext pointer.
+ * @param pc_ctx The PostCollectionContext pointer.
  * @returns the return value is not used for the time being...
  */
-int post_collection(struct CollectionContext *cl_ctx,
-                    struct PostCollectionContext *cb_ctx);
+int post_collection(void *ctx, void *pc_ctx);
 
 /**
- * @brief
- * @param ctx The context pointer. It is owned by the function caller, i.e., the
- * ev_collect_data() event loop. You will need to release the resources
- * allocated to ctx->context, which is owned by this function.
+ * @brief Release the resources allocated to/managed by the context object.
  */
-void post_collection_destroy(struct PostCollectionContext *ctx);
+void post_collection_destroy(void *pc_ctx);
 
-struct CollectionContext collection_init(const json_object *config);
+/**
+ * @brief Initialize a context object to be used by collection()
+ * @return NULL on failure or a valid context object pointer
+ */
+void *collection_init(const json_object *config);
 
 /**
  * @brief
- * @param ctx The context pointer. It is owned by the function caller, i.e., the
- * ev_collect_data() event loop
+ * @param ctx The context pointer initialized by collection_init().
  * @returns 0 on success; positive number on recoverable error (i.e., the event
  * loop can continue); negative number on fatal error (i.e., need to break the
  * data collection event loop)
  */
-int collection(struct CollectionContext *ctx);
+int collection(void *ctx);
 
 /**
- * @brief
- * @param ctx The context pointer. It is owned by the function caller, i.e., the
- * ev_collect_data() event loop. You will need to release the resources
- * allocated to ctx->context, which is owned by this function.
+ * @brief Release the resources allocated to/managed by the context object.
  */
-void collection_destroy(struct CollectionContext *ctx);
+void collection_destroy(void *ctx);
 
 #endif // MODULE_H
