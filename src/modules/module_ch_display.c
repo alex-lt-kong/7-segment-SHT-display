@@ -30,16 +30,14 @@ struct CHContext {
   char *external_program;
 };
 
-struct PostCollectionContext post_collection_init(const json_object *config) {
+void *post_collection_init(const json_object *config) {
   const json_object *root = config;
   json_object *root_7sd;
   json_object_object_get_ex(root, "7seg_display", &root_7sd);
 
-  struct PostCollectionContext ctx;
-  ctx.init_success = true;
-
   struct CHContext *chctx = malloc(sizeof(struct CHContext));
   if (chctx == NULL) {
+    SYSLOG_ERR("malloc() failed");
     goto err_malloc_chctx;
   }
 
@@ -54,6 +52,7 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
   chctx->last_status_update_at = 0;
   chctx->month_days = malloc(sizeof(uint8_t[chctx->date_count][2]));
   if (chctx->month_days == NULL) {
+    SYSLOG_ERR("malloc() failed");
     goto err_malloc_month_days;
   }
   syslog(LOG_INFO, "Effective dates (in month, day) are:");
@@ -71,42 +70,41 @@ struct PostCollectionContext post_collection_init(const json_object *config) {
   json_object *root_external_command;
   json_object_object_get_ex(root, "external_command", &root_external_command);
   const char *external_prog = json_object_get_string(root_external_command);
-  if (external_prog != NULL && strlen(external_prog) > 0)
+  if (external_prog != NULL && strlen(external_prog) > 0) {
     chctx->external_program = malloc(strlen(external_prog) + 1);
-  else
-    chctx->external_program = NULL;
-  strcpy(chctx->external_program, external_prog);
-  if (chctx->external_program == NULL) {
-    SYSLOG_ERR("external_program initialization failed");
+    if (chctx->external_program == NULL) {
+      SYSLOG_ERR("malloc() failed");
+      goto err_external_program;
+    }
+    strcpy(chctx->external_program, external_prog);
+    syslog(LOG_INFO, "external_program to execute on threshold crossing: [%s]",
+           chctx->external_program);
+  } else {
+    syslog(LOG_INFO, "external_program is empty");
     goto err_external_program;
   }
-  syslog(LOG_INFO, "external_program to execute on threshold crossing: [%s]",
-         chctx->external_program);
 
   chctx->h = init_7seg_from_json(root_7sd);
   if (chctx->h == NULL) {
-    ctx.init_success = false;
-    free(chctx);
-    return ctx;
+    goto err_init_7seg_from_json;
   }
-  ctx.context = chctx;
-  return ctx;
+  return chctx;
 
+err_init_7seg_from_json:
+  free(chctx->external_program);
 err_external_program:
   free(chctx->month_days);
 err_malloc_month_days:
 err_no_effective_dates:
   free(chctx);
 err_malloc_chctx:
-  ctx.init_success = false;
-  return ctx;
+  return NULL;
 }
 
-int post_collection(struct CollectionContext *c_ctx,
-                    struct PostCollectionContext *pc_ctx) {
+int post_collection(void *c_ctx, void *pc_ctx) {
 
-  struct DL11MC *r = (struct DL11MC *)c_ctx->context;
-  struct CHContext *chctx = (struct CHContext *)pc_ctx->context;
+  struct DL11MC *r = (struct DL11MC *)c_ctx;
+  struct CHContext *chctx = (struct CHContext *)pc_ctx;
   struct iotctrl_7seg_disp_handle *h = chctx->h;
   iotctrl_7seg_disp_update_as_four_digit_float(h, r->temperature_celsius, 0);
 
@@ -147,6 +145,10 @@ int post_collection(struct CollectionContext *c_ctx,
   if (r->temperature_celsius <= threshold)
     return 0;
   chctx->last_status_update_at = t;
+  
+  // By design, chctx->external_program should never be NULL
+  if (chctx->external_program == NULL)
+    return 0;
   char external_command[PATH_MAX];
   snprintf(external_command, PATH_MAX - 1, chctx->external_program,
            r->temperature_celsius);
@@ -164,16 +166,15 @@ int post_collection(struct CollectionContext *c_ctx,
   return 0;
 }
 
-void post_collection_destroy(struct PostCollectionContext *ctx) {
-  struct CHContext *chctx = (struct CHContext *)ctx->context;
+void post_collection_destroy(void *ctx) {
+  struct CHContext *chctx = (struct CHContext *)ctx;
   free(chctx->external_program);
   free(chctx->month_days);
   iotctrl_7seg_disp_destroy(chctx->h);
   free(chctx);
 }
 
-struct CollectionContext collection_init(const json_object *config) {
-  struct CollectionContext ctx = {.init_success = true, .context = NULL};
+void *collection_init(const json_object *config) {
   struct DL11MC *d = malloc(sizeof(struct DL11MC));
   if (d == NULL) {
     SYSLOG_ERR("malloc() failed");
@@ -195,19 +196,15 @@ struct CollectionContext collection_init(const json_object *config) {
   strcpy(d->device_path, device_path);
 
   d->temperature_celsius = 888.8;
-  ctx.context = d;
-
-  return ctx;
-
+  return d;
 err_malloc_device_path:
   free(d);
 err_malloc_handle:
-  ctx.init_success = false;
-  return ctx;
+  return NULL;
 }
 
 int collection(void *ctx) {
-  struct DL11MC *dl11 = (struct DL11MC *)ctx->context;
+  struct DL11MC *dl11 = (struct DL11MC *)ctx;
   int res;
   const uint8_t sensor_count = 1;
   int16_t temps[sensor_count];
@@ -226,8 +223,8 @@ int collection(void *ctx) {
   return 0;
 }
 
-void void collection_destroy(struct CollectionContext *ctx) {
-  struct DL11MC *dl11 = (struct DL11MC *)ctx->context;
+void collection_destroy(void *ctx) {
+  struct DL11MC *dl11 = (struct DL11MC *)ctx;
   free(dl11->device_path);
   dl11->device_path = NULL;
   free(dl11);
