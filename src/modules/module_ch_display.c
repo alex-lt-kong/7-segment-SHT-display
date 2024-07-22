@@ -145,7 +145,7 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   if (r->temperature_celsius <= threshold)
     return 0;
   chctx->last_status_update_at = t;
-  
+
   // By design, chctx->external_program should never be NULL
   if (chctx->external_program == NULL)
     return 0;
@@ -213,6 +213,7 @@ int collection(void *ctx) {
                                      0)) != 0) {
     temp = 999;
     SYSLOG_ERR("iotctrl_get_temperature() failed, returned %d", res);
+    return 1;
   } else {
     temp = temps[0];
   }
