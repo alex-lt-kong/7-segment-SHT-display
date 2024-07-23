@@ -109,7 +109,7 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   iotctrl_7seg_disp_update_as_four_digit_float(h, r->temperature_celsius, 0);
 
   time_t t = time(NULL);
-  int interval_sec = 7200;
+  int interval_sec = 3600 * 3;
   if (t - chctx->last_status_update_at < interval_sec)
     return 0;
 
