@@ -1,29 +1,57 @@
-message( STATUS "Available modules at ${CMAKE_CURRENT_SOURCE_DIR}/modules:" )
-    set(DIRECTORY_TO_LIST "${CMAKE_CURRENT_SOURCE_DIR}/modules")
+#
+# ===== module selection =====
+#
+# Define all available modules in a list
+set(AVAILABLE_MODULES
+    dd-mqtt
+    sample
+)
+# Create the selection option
+set(BUILD_MODULE "NONE" CACHE STRING "Select which module to build")
+# Build the list of valid choices
+set(VALID_MODULES "NONE")
+foreach(MODULE IN LISTS AVAILABLE_MODULES)
+    list(APPEND VALID_MODULES ${MODULE})
+endforeach()
+# Set valid options for cmake-gui and ccmake
+set_property(CACHE BUILD_MODULE PROPERTY STRINGS ${VALID_MODULES})
 
-    # Use file(GLOB) to get a list of all files in the directory
-    file(GLOB FILES_IN_DIRECTORY "${DIRECTORY_TO_LIST}/*")
-
-    # Iterate through the list of files and print just the file names to stdout
-    foreach(FILE ${FILES_IN_DIRECTORY})
-        get_filename_component(FILENAME ${FILE} NAME)
-        message(STATUS "${FILENAME}")
-    endforeach()
-
-if(NOT DEFINED MODULE_NAME)
-    message( FATAL_ERROR "MODULE_NAME undefined, set your MODULE_NAME by -DMODULE_NAME=<module_name>.c")
+# Validate selection
+if(BUILD_MODULE STREQUAL "NONE")
+    message(FATAL_ERROR "Please select one module using -DBUILD_MODULE=<module_name>
+    Available modules: ${AVAILABLE_MODULES}")
 endif()
+
+# Verify that the selected module is valid
+list(FIND AVAILABLE_MODULES ${BUILD_MODULE} MODULE_INDEX)
+if(MODULE_INDEX EQUAL -1)
+    message(FATAL_ERROR "Invalid module '${BUILD_MODULE}'. 
+    Available modules: ${AVAILABLE_MODULES}")
+endif()
+
+# Include the selected module
+add_subdirectory(./modules/${BUILD_MODULE})
+
+
+# Optional: Print selected module
+message(STATUS "Building with module: ${BUILD_MODULE}")
+add_definitions(-DMODULE_NAME="${BUILD_MODULE}")
+#
+# ===== module selection ends =====
+#
 
 add_executable(sdp
     main.c
     global_vars.c
     event_loops.c
     utils.c
-    module_lib.c
-    ./modules/${MODULE_NAME}
+    ./modules/module_lib.c
+    #./modules/${MODULE_NAME}
 )
+#target_link_libraries(sdp PRIVATE )
 
 target_link_libraries(sdp
+    ${BUILD_MODULE}
     iotctrl
-    gpiod modbus pthread curl json-c
+    gpiod pthread json-c
 )
