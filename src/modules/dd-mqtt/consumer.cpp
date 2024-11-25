@@ -30,14 +30,14 @@
 using namespace std;
 using json = nlohmann::json;
 
-struct T2RHReadings {
-  double temp_celsius0;
-  double temp_celsius1;
-  double relative_humidity;
+struct Readings {
+  double temp_outdoor_celsius;
+  double temp_indoor_celsius;
+  double rh_outdoor;
 };
 
 struct ConnectionInfo {
-  struct T2RHReadings readings;
+  struct Readings readings;
   char *dht31_device_path;
   char *dl11_device_path;
 };
@@ -108,13 +108,13 @@ void mosquitto_on_message(struct mosquitto *mosq, void *obj,
   }
   spdlog::info("{} {} {}", msg->topic, msg->qos, payload.dump());
   iotctrl_7seg_disp_update_as_four_digit_float(
-      h0, payload.value("/temp0_celsius"_json_pointer, 888.8), 0);
+      h0, payload.value("/temp_outdoor_celsius"_json_pointer, 888.8), 0);
   iotctrl_7seg_disp_update_as_four_digit_float(
-      h0, payload.value("/relative_humidity"_json_pointer, 888.8), 1);
+      h0, payload.value("/rh_outdoor"_json_pointer, 888.8), 1);
   iotctrl_7seg_disp_update_as_four_digit_float(
-      h1, payload.value("/temp0_celsius"_json_pointer, 888.8), 0);
+      h1, payload.value("/temp_outdoor_celsius"_json_pointer, 888.8), 0);
   iotctrl_7seg_disp_update_as_four_digit_float(
-      h1, payload.value("/temp1_celsius"_json_pointer, 888.8), 1);
+      h1, payload.value("/temp_indoor_celsius"_json_pointer, 888.8), 1);
 }
 
 int main(int argc, char **argv) {
@@ -148,8 +148,8 @@ int main(int argc, char **argv) {
     settings.value("/dd_mqtt/7seg_display0/gpiochip_path"_json_pointer, "/dev/gpiochip0").c_str());
   // clang-format on
   if ((h0 = iotctrl_7seg_disp_init(conn0)) == NULL) {
-    fprintf(stderr, "iotctrl_7seg_disp_init(conn0) failed. Check stderr for "
-                    "possible internal error messages");
+    spdlog::error("iotctrl_7seg_disp_init(conn0) failed. Check stderr for "
+                  "possible internal error messages");
     goto err_h0_error;
   }
   // clang-format off
@@ -162,34 +162,34 @@ int main(int argc, char **argv) {
     "/dev/gpiochip0").c_str());
   // clang-format on
   if ((h1 = iotctrl_7seg_disp_init(conn1)) == NULL) {
-    fprintf(stderr, "iotctrl_7seg_disp_init(conn1) failed. Check stderr for "
-                    "possible internal error messages");
+    spdlog::error("iotctrl_7seg_disp_init(conn1) failed. Check stderr for "
+                  "possible internal error messages");
 
     goto err_h1_error;
   }
 
-  /* Required before calling other mosquitto functions */
   mosquitto_lib_init();
   mosq = mosquitto_new(NULL, true, NULL);
   if (mosq == NULL) {
-    fprintf(stderr, "Error: Out of memory.\n");
-    goto err_mosquitto;
+    spdlog::error("mosquitto_new() error:", mosquitto_strerror(rc));
+    goto err_mosquitto_alloc;
   }
   if ((rc = mosquitto_username_pw_set(
            mosq,
            settings.value("/dd_mqtt/username"_json_pointer, "test").c_str(),
            settings.value("/dd_mqtt/password"_json_pointer, "test").c_str())) !=
       MOSQ_ERR_SUCCESS) {
-    printf("mosquitto_username_pw_set() err\n");
-    goto err_mosquitto;
+    spdlog::error("mosquitto_username_pw_set() error: {}",
+                  mosquitto_strerror(rc));
+    goto err_mosquitto_init;
   }
   if ((rc = mosquitto_tls_set(
            mosq,
            settings.value("/dd_mqtt/ca_file_path"_json_pointer, "/tmp/ca.crt")
                .c_str(),
            NULL, NULL, NULL, NULL)) != MOSQ_ERR_SUCCESS) {
-    printf("mosquitto_tls_set() err: %s\n", mosquitto_strerror(rc));
-    goto err_mosquitto;
+    spdlog::error("mosquitto_tls_set() error: {}", mosquitto_strerror(rc));
+    goto err_mosquitto_init;
   }
   mosquitto_connect_callback_set(mosq, mosquitto_on_connect);
   mosquitto_subscribe_callback_set(mosq, mosquitto_on_subscribe);
@@ -199,17 +199,20 @@ int main(int argc, char **argv) {
       mosq, settings.value("/dd_mqtt/host"_json_pointer, "localhost").c_str(),
       8883, 60);
   if (rc != MOSQ_ERR_SUCCESS) {
-    mosquitto_destroy(mosq);
-    fprintf(stderr, "Error: %s\n", mosquitto_strerror(rc));
+    spdlog::error("mosquitto_connect() error: {}", mosquitto_strerror(rc));
+    goto err_mosquitto_init;
     return 1;
   }
 
   spdlog::info("mosquitto_loop_forever()...");
   mosquitto_loop_forever(mosq, -1, 1);
 
+  mosquitto_destroy(mosq);
   mosquitto_lib_cleanup();
-
-err_mosquitto:
+  return 0;
+err_mosquitto_init:
+  mosquitto_destroy(mosq);
+err_mosquitto_alloc:
   iotctrl_7seg_disp_destroy(h1);
 err_h1_error:
   iotctrl_7seg_disp_destroy(h0);

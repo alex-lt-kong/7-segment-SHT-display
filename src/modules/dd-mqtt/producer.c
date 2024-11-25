@@ -8,23 +8,24 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/syslog.h>
 #include <syslog.h>
 #include <time.h>
 
 struct PostCollectionCtx {
   struct mosquitto *mosq;
   bool is_mqtt_connected;
-  char *topic;
+  const char *topic;
 };
 
-struct T2RHReadings {
-  double temp_celsius0;
-  double temp_celsius1;
-  double relative_humidity;
+struct Readings {
+  double temp_outdoor_celsius;
+  double temp_indoor_celsius;
+  double rh_outdoor;
 };
 
 struct ConnectionInfo {
-  struct T2RHReadings readings;
+  struct Readings readings;
   char *dht31_device_path;
   char *dl11_device_path;
 };
@@ -32,49 +33,51 @@ struct ConnectionInfo {
 void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
                        const char *str) {
   (void)mosq;
+  (void)userdata;
   switch (level) {
   // case MOSQ_LOG_DEBUG:
-  // case MOSQ_LOG_INFO:
-  // case MOSQ_LOG_NOTICE:
+  case MOSQ_LOG_INFO:
+    syslog(LOG_INFO, "%s", str);
+    break;
+  case MOSQ_LOG_NOTICE:
+    syslog(LOG_INFO, "%s", str);
+    break;
   case MOSQ_LOG_WARNING:
-    printf("%i:%s\n", level, str);
+    syslog(LOG_WARNING, "%s", str);
+    break;
   case MOSQ_LOG_ERR: {
-    printf("%i:%s\n", level, str);
+    SYSLOG_ERR("%s", str);
+    break;
   }
   }
 }
 
-void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
-  /* Print out the connection result. mosquitto_connack_string() produces an
-   * appropriate string for MQTT v3.x clients, the equivalent for MQTT v5.0
-   * clients is mosquitto_reason_string().
-   */
+void mosq_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
+  (void)mosq;
   struct PostCollectionCtx *ctx = (struct PostCollectionCtx *)obj;
-  syslog(LOG_INFO, "mqtt on_connect()ed: %s",
+  syslog(LOG_INFO, "mosq_on_connect(): %s",
          mosquitto_connack_string(reason_code));
   ctx->is_mqtt_connected = true;
 }
 
-void on_disconnect(struct mosquitto *mosq, void *obj, int reason_code) {
+void mosq_on_disconnect(struct mosquitto *mosq, void *obj, int reason_code) {
   (void)mosq;
   /* Print out the connection result. mosquitto_connack_string() produces an
    * appropriate string for MQTT v3.x clients, the equivalent for MQTT v5.0
    * clients is mosquitto_reason_string().
    */
   struct PostCollectionCtx *ctx = (struct PostCollectionCtx *)obj;
-  printf("mqtt on_disconnect()ed: %s\n", mosquitto_connack_string(reason_code));
+  printf("mosq_on_disconnect(): %s\n", mosquitto_connack_string(reason_code));
   ctx->is_mqtt_connected = false;
 }
 
 /* Callback called when the client knows to the best of its abilities that a
- * PUBLISH has been successfully sent. For QoS 0 this means the message has
- * been completely written to the operating system. For QoS 1 this means we
- * have received a PUBACK from the broker. For QoS 2 this means we have
- * received a PUBCOMP from the broker. */
-void on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
+ * PUBLISH has been successfully sent.  */
+void mosq_on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
   (void)mosq;
   (void)obj;
-  syslog(LOG_INFO, "Message (msg_id: %d) has been published.", msg_id);
+  syslog(LOG_INFO,
+         "mosq_on_publish(): Message (msg_id: %d) has been published.", msg_id);
 }
 
 void *post_collection_init(const json_object *config) {
@@ -97,7 +100,6 @@ void *post_collection_init(const json_object *config) {
   const char *username;
   const char *password;
   const char *host;
-  const char *topic;
   if (json_object_object_get_ex(root, "ca_file_path", &root_ca_file_path) ==
           false ||
       json_object_object_get_ex(root, "username", &root_username) == false ||
@@ -149,25 +151,22 @@ void *post_collection_init(const json_object *config) {
     SYSLOG_ERR("mosquitto_tls_set() failed: %s", mosquitto_strerror(rc));
     goto err_mosquitto_config;
   }
-  mosquitto_connect_callback_set(ctx->mosq, on_connect);
-  mosquitto_disconnect_callback_set(ctx->mosq, on_connect);
-  mosquitto_publish_callback_set(ctx->mosq, on_publish);
+  mosquitto_connect_callback_set(ctx->mosq, mosq_on_connect);
+  mosquitto_disconnect_callback_set(ctx->mosq, mosq_on_connect);
+  mosquitto_publish_callback_set(ctx->mosq, mosq_on_publish);
   mosquitto_log_callback_set(ctx->mosq, mosq_log_callback);
 
-  /* Connect to test.mosquitto.org on port 1883, with a keepalive of 60
-   * seconds. This call makes the socket connection only, it does not complete
+  /*  This call makes the socket connection only, it does not complete
    * the MQTT CONNECT/CONNACK flow, you should use mosquitto_loop_start() or
    * mosquitto_loop_forever() for processing net traffic. */
-  rc = mosquitto_connect(ctx->mosq, "apps.mamsds.com", 8883, 60);
+  rc = mosquitto_connect(ctx->mosq, host, 8883, 60);
   if (rc != MOSQ_ERR_SUCCESS) {
     SYSLOG_ERR("mosquitto_connect() failed: %s", mosquitto_strerror(rc));
     goto err_mosquitto_connect;
   }
 
-  /* Run the network loop in a background thread, this call returns quickly.
-   */
-  rc = mosquitto_loop_start(ctx->mosq);
-  if (rc != MOSQ_ERR_SUCCESS) {
+  /* Run the network loop in a background thread, this call returns quickly. */
+  if ((mosquitto_loop_start(ctx->mosq)) != MOSQ_ERR_SUCCESS) {
     SYSLOG_ERR("mosquitto_loop_start() failed: %s", mosquitto_strerror(rc));
     goto err_mosquitto_connect;
   }
@@ -185,7 +184,7 @@ err_ctx_malloc:
 }
 
 int post_collection(void *c_ctx, void *pc_ctx) {
-  struct T2RHReadings *_readings = (struct T2RHReadings *)c_ctx;
+  struct Readings *_readings = (struct Readings *)c_ctx;
   struct PostCollectionCtx *_pc_ctx = (struct PostCollectionCtx *)pc_ctx;
   char payload[128];
   int rc;
@@ -198,11 +197,11 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%SZ", utc_time);
 
   snprintf(payload, sizeof(payload),
-           "{\"timestamp\": \"%s\", \"temp0_celsius\": %.1f, "
-           "\"temp1_celsius\": %.1f, "
-           "\"relative_humidity\": %.1f}",
-           iso_time, _readings->temp_celsius0, _readings->temp_celsius1,
-           _readings->relative_humidity);
+           "{\"timestamp\": \"%s\", \"temp_outdoor_celsius\": %.1f, "
+           "\"temp_indoor_celsius\": %.1f, "
+           "\"rh_outdoor\": %.1f}",
+           iso_time, _readings->temp_outdoor_celsius,
+           _readings->temp_indoor_celsius, _readings->rh_outdoor);
 
   /* Publish the message
    * mosq - our client instance
@@ -214,7 +213,7 @@ int post_collection(void *c_ctx, void *pc_ctx) {
    * message
    */
   rc = mosquitto_publish(_pc_ctx->mosq, NULL, _pc_ctx->topic, strlen(payload),
-                         payload, 2, false);
+                         payload, 1, false);
   if (rc != MOSQ_ERR_SUCCESS) {
     SYSLOG_ERR("Error publishing: %s", mosquitto_strerror(rc));
     return 1;
@@ -227,8 +226,11 @@ int post_collection(void *c_ctx, void *pc_ctx) {
 
 void post_collection_destroy(void *ctx) {
   struct PostCollectionCtx *_ctx = (struct PostCollectionCtx *)ctx;
+  if (_ctx != NULL) {
+    mosquitto_destroy(_ctx->mosq);
+    free(_ctx);
+  }
   mosquitto_lib_cleanup();
-  free(_ctx);
 }
 
 void *collection_init(const json_object *config) {
@@ -275,9 +277,9 @@ void *collection_init(const json_object *config) {
   }
   strcpy(conn->dl11_device_path, device_path);
 
-  conn->readings.temp_celsius0 = 888.8;
-  conn->readings.temp_celsius1 = 888.8;
-  conn->readings.relative_humidity = 888.8;
+  conn->readings.temp_outdoor_celsius = 888.8;
+  conn->readings.temp_indoor_celsius = 888.8;
+  conn->readings.rh_outdoor = 888.8;
   syslog(LOG_INFO,
          "collection_init() success, dht31_device_path: %s, "
          "dl11_device_path: %s",
@@ -309,8 +311,8 @@ int collection(void *ctx) {
     ret = 1;
     goto err_dht31_read;
   }
-  conn->readings.temp_celsius0 = temp_celsius_t;
-  conn->readings.relative_humidity = relative_humidity_t;
+  conn->readings.temp_outdoor_celsius = temp_celsius_t;
+  conn->readings.rh_outdoor = relative_humidity_t;
 
   if (iotctrl_get_temperature(conn->dl11_device_path, sensor_count, readings,
                               0) != 0) {
@@ -318,12 +320,12 @@ int collection(void *ctx) {
     syslog(LOG_INFO, "iotctrl_get_temperature() failed: %d", ret);
     goto err_dl11_read;
   }
-  conn->readings.temp_celsius1 = readings[0] / 10.0;
+  conn->readings.temp_indoor_celsius = readings[0] / 10.0;
 
   syslog(LOG_INFO,
          "Readings changed to temp0: %.1f°C, temp1: %.1f°C, RH: %.1f%%",
-         conn->readings.temp_celsius0, conn->readings.temp_celsius1,
-         conn->readings.relative_humidity);
+         conn->readings.temp_outdoor_celsius,
+         conn->readings.temp_indoor_celsius, conn->readings.rh_outdoor);
 err_dl11_read:
 err_dht31_read:
   iotctrl_dht31_destroy(fd);
