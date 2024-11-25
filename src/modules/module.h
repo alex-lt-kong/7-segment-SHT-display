@@ -18,7 +18,7 @@ void *post_collection_init(const json_object *config);
 int post_collection(void *ctx, void *pc_ctx);
 
 /**
- * @brief Release the resources allocated to/managed by the context object.
+ * @brief Release the resources allocated to/managed by the context object. This function will always be called regardless of whether post_collection_init() is successful
  */
 void post_collection_destroy(void *pc_ctx);
 

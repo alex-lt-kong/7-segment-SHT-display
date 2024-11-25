@@ -1,0 +1,27 @@
+{
+    "dd_mqtt": {
+        "host": "localhost",
+        "username": "test",
+        "password": "test",
+        "topic": "topic/test",
+        "ca_file_path": "/etc/ssl/certs/ca-certificates.crt",
+        "dht31_device_path": "/dev/i2c-1",
+        "dl11_device_path": "/dev/ttyUSB0",
+        "7seg_display0": {
+            "data_pin_num": 22,
+            "clock_pin_num": 11,
+            "latch_pin_num": 18,
+            "chain_num": 2,
+            "refresh_rate_hz": 2000,
+            "gpiochip_path": "/dev/gpiochip0"
+        },
+        "7seg_display1": {
+            "data_pin_num": 7,
+            "clock_pin_num": 5,
+            "latch_pin_num": 6,
+            "chain_num": 2,
+            "refresh_rate_hz": 32000,
+            "gpiochip_path": "/dev/gpiochip0"
+        }
+    }
+}

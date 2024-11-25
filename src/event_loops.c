@@ -1,5 +1,5 @@
 #include "global_vars.h"
-#include "module.h"
+#include "modules/module.h"
 #include "utils.h"
 
 #include <errno.h>
@@ -51,7 +51,6 @@ void ev_collect_data() {
     post_collection(c_ctx, pc_ctx);
   }
   post_collection_destroy(pc_ctx);
-  // if (c_ctx.init_success) is not needed as we use goto to handle this case
   collection_destroy(c_ctx);
 err_collection_init:
   syslog(LOG_INFO, "ev_collect_data() exited gracefully.");

@@ -1,7 +1,7 @@
 #ifndef GLOBAL_VARS_H
 #define GLOBAL_VARS_H
 
-#include "module.h"
+#include "modules/module.h"
 
 #include <json-c/json.h>
 
@@ -9,7 +9,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// #define PROGRAM_NAME "temp-and-humidity-monitor"
 
 extern json_object *gv_config_root;
 

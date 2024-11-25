@@ -1,6 +1,4 @@
 #include "module_lib.h"
-#include "module.h"
-#include "utils.h"
 
 #include <iotctrl/7segment-display.h>
 
@@ -43,7 +41,7 @@ init_7seg_from_json(const json_object *config) {
   if (conn.data_pin_num == 0 || conn.clock_pin_num == 0 ||
       conn.latch_pin_num == 0 || conn.chain_num == 0 ||
       conn.refresh_rate_hz == 0 || strlen(conn.gpiochip_path) == 0) {
-    SYSLOG_ERR("Some required values are not provided");
+    fprintf(stderr, "Some required values are not provided");
     return NULL;
   }
   syslog(LOG_INFO, "7segment display parameters:");
@@ -56,8 +54,8 @@ init_7seg_from_json(const json_object *config) {
   struct iotctrl_7seg_disp_handle *h;
 
   if ((h = iotctrl_7seg_disp_init(conn)) == NULL) {
-    SYSLOG_ERR("iotctrl_7seg_disp_init() failed. Check stderr for "
-               "possible internal error messages");
+    fprintf(stderr, "iotctrl_7seg_disp_init() failed. Check stderr for "
+                    "possible internal error messages");
     return NULL;
   }
   return h;

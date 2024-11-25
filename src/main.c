@@ -78,14 +78,14 @@ int main(int argc, char **argv) {
 
   const char *config_path = parse_args(argc, argv);
 
-  openlog(PROGRAM_NAME, LOG_PID | LOG_CONS, LOG_USER);
+  openlog(PROGRAM_NAME "_" MODULE_NAME, LOG_PID | LOG_CONS, LOG_USER);
 
   if ((r = load_values_from_json(config_path)) != 0) {
     retval = -1;
     SYSLOG_ERR("Failed to load settings from [%s]. retval: %d", config_path, r);
     goto err_config_file;
   }
-  syslog(LOG_INFO, "%s started", PROGRAM_NAME);
+  syslog(LOG_INFO, PROGRAM_NAME "_" MODULE_NAME " started");
 
   if ((r = install_signal_handler()) != 0) {
     retval = -2;
