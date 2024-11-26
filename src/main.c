@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
 
   const char *config_path = parse_args(argc, argv);
 
-  openlog(PROGRAM_NAME "_" MODULE_NAME, LOG_PID | LOG_CONS, LOG_USER);
+  openlog(PROGRAM_NAME "_" MODULE_NAME, LOG_PID | LOG_CONS | LOG_PERROR, LOG_USER);
 
   if ((r = load_values_from_json(config_path)) != 0) {
     retval = -1;

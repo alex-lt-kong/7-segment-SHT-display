@@ -4,6 +4,7 @@
 # Define all available modules in a list
 set(AVAILABLE_MODULES
     dd-mqtt
+    hko
     sample
 )
 # Create the selection option
@@ -45,13 +46,10 @@ add_executable(sdp
     global_vars.c
     event_loops.c
     utils.c
-    ./modules/module_lib.c
-    #./modules/${MODULE_NAME}
 )
-#target_link_libraries(sdp PRIVATE )
 
 target_link_libraries(sdp
     ${BUILD_MODULE}
-    iotctrl
-    gpiod pthread json-c
+    #iotctrl gpiod
+    pthread json-c
 )

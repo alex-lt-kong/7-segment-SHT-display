@@ -1,0 +1,9 @@
+{
+    "hko": {
+        "host": "localhost",
+        "username": "test",
+        "password": "test",
+        "topic": "topic/test",
+        "ca_file_path": "/etc/ssl/certs/ca-certificates.crt"
+    }
+}

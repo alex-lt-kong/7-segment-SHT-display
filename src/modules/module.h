@@ -1,6 +1,10 @@
 #ifndef MODULE_H
 #define MODULE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <json-c/json.h>
 
 /**
@@ -41,5 +45,9 @@ int collection(void *ctx);
  * @brief Release the resources allocated to/managed by the context object.
  */
 void collection_destroy(void *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // MODULE_H
