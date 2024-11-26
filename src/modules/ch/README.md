@@ -1,0 +1,3 @@
+- [libiotctrl](https://github.com/alex-lt-kong/libiotctrl): GPIO support
+- Enable `I2C interface` with `raspi-config`.
+- Check status of `I2C` device with `dmesg | grep i2c`.

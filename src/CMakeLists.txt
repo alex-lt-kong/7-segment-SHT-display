@@ -5,6 +5,7 @@
 set(AVAILABLE_MODULES
     dd-mqtt
     hko
+    ch
     sample
 )
 # Create the selection option
