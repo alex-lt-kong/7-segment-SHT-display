@@ -118,7 +118,6 @@ void mosquitto_on_message(struct mosquitto *mosq, void *obj,
 }
 
 int main(int argc, char **argv) {
-  int rc;
   struct mosquitto *mosq;
   cxxopts::Options options(argv[0], PROGRAM_NAME);
   string config_path;
@@ -167,11 +166,11 @@ int main(int argc, char **argv) {
 
     goto err_h1_error;
   }
-
+  int rc;
   mosquitto_lib_init();
   mosq = mosquitto_new(NULL, true, NULL);
   if (mosq == NULL) {
-    spdlog::error("mosquitto_new() error:", mosquitto_strerror(rc));
+    spdlog::error("mosquitto_new() error");
     goto err_mosquitto_alloc;
   }
   if ((rc = mosquitto_username_pw_set(

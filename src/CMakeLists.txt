@@ -3,7 +3,7 @@
 #
 # Define all available modules in a list
 set(AVAILABLE_MODULES
-    dd-mqtt
+    dd
     hko
     ch
     sample
