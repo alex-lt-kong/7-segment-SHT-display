@@ -1,4 +1,4 @@
-#include "module_lib.h"
+#include "7seg.h"
 
 #include <iotctrl/7segment-display.h>
 

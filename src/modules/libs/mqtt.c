@@ -3,8 +3,8 @@
 #include <mosquitto.h>
 #include <sys/syslog.h>
 
-inline void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
-                              const char *str) {
+void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
+                       const char *str) {
   (void)mosq;
   (void)userdata;
   switch (level) {
@@ -24,32 +24,29 @@ inline void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
   }
 }
 
-inline void mosq_on_connect(struct mosquitto *mosq, void *obj,
-                            int reason_code) {
+void mosq_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
   (void)mosq;
   (void)obj;
   syslog(LOG_INFO, "mosq_on_connect: %s",
          mosquitto_connack_string(reason_code));
 }
 
-inline void mosq_on_disconnect(struct mosquitto *mosq, void *obj,
-                               int reason_code) {
+void mosq_on_disconnect(struct mosquitto *mosq, void *obj, int reason_code) {
   (void)mosq;
   (void)obj;
   syslog(LOG_INFO, "mosq_on_disconnect(): %s",
          mosquitto_connack_string(reason_code));
 }
-inline void mosq_on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
+
+void mosq_on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
   (void)mosq;
   (void)obj;
   syslog(LOG_INFO,
          "mosq_on_publish(): Message (msg_id: %d) has been published.", msg_id);
 }
 
-inline struct mosquitto *initMosquitto(const char *host,
-                                       const char *ca_file_path,
-                                       const char *username,
-                                       const char *password) {
+struct mosquitto *initMosquitto(const char *host, const char *ca_file_path,
+                                const char *username, const char *password) {
   int rc;
   struct mosquitto *mosq;
   /* Required before calling other mosquitto functions */

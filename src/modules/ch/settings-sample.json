@@ -1,0 +1,19 @@
+{
+    "ch": {
+        "mqtt": {
+            "host": "localhost",
+            "username": "test",
+            "password": "test",
+            "topic": "topic/test",
+            "ca_file_path": "/etc/ssl/certs/ca-certificates.crt"
+        },
+        "7seg_display": {
+            "data_pin_num": 17,
+            "clock_pin_num": 11,
+            "latch_pin_num": 18,
+            "chain_num": 1,
+            "gpiochip_path": "/dev/gpiochip0",
+            "refresh_rate_hz": 1000
+        }
+    }
+}

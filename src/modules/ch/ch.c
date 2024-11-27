@@ -1,7 +1,8 @@
 #include "../../global_vars.h"
 #include "../../utils.h"
+#include "../libs/7seg.h"
+#include "../libs/mqtt.h"
 #include "../module.h"
-#include "../module_lib.h"
 
 #include <iotctrl/7segment-display.h>
 #include <iotctrl/temp-sensor.h>
@@ -24,78 +25,101 @@ struct DL11MC {
 
 struct CHContext {
   struct iotctrl_7seg_disp_handle *h;
-  time_t last_status_update_at;
-  uint8_t (*month_days)[2];
-  size_t date_count;
-  char *external_program;
+  struct mosquitto *mosq;
+  const char *topic;
 };
 
 void *post_collection_init(const json_object *config) {
   const json_object *root = config;
-  json_object *root_7sd;
-  json_object_object_get_ex(root, "7seg_display", &root_7sd);
 
   struct CHContext *chctx = malloc(sizeof(struct CHContext));
   if (chctx == NULL) {
     SYSLOG_ERR("malloc() failed");
     goto err_malloc_chctx;
   }
-
-  json_object *root_effective_dates;
-  json_object_object_get_ex(root, "effective_dates", &root_effective_dates);
-  chctx->date_count = json_object_array_length(root_effective_dates);
-  if (chctx->date_count == 0) {
-    SYSLOG_ERR("No effective_dates are defined");
-    goto err_no_effective_dates;
+  struct json_object *json_ele;
+  const char *host = NULL;
+  const char *username = NULL;
+  const char *password = NULL;
+  const char *ca_file_path = NULL;
+  json_pointer_get((json_object *)config, "/ch/mqtt/host", &json_ele);
+  host = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/ch/mqtt/username", &json_ele);
+  username = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/ch/mqtt/password", &json_ele);
+  password = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/ch/mqtt/ca_file_path", &json_ele);
+  ca_file_path = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/ch/mqtt/topic", &json_ele);
+  chctx->topic = json_object_get_string(json_ele);
+  if (host == NULL || ca_file_path == NULL || username == NULL ||
+      password == NULL || chctx->topic == NULL) {
+    SYSLOG_ERR("Invalid configs");
+    goto err_invalid_settings;
   }
 
-  chctx->last_status_update_at = 0;
-  chctx->month_days = malloc(sizeof(uint8_t[chctx->date_count][2]));
-  if (chctx->month_days == NULL) {
-    SYSLOG_ERR("malloc() failed");
-    goto err_malloc_month_days;
-  }
-  syslog(LOG_INFO, "Effective dates (in month, day) are:");
-  for (size_t i = 0; i < chctx->date_count; ++i) {
-    struct json_object *ele =
-        json_object_array_get_idx(root_effective_dates, i);
-    chctx->month_days[i][0] =
-        json_object_get_int(json_object_array_get_idx(ele, 0));
-    chctx->month_days[i][1] =
-        json_object_get_int(json_object_array_get_idx(ele, 1));
-    syslog(LOG_INFO, "%d, %d", chctx->month_days[i][0],
-           chctx->month_days[i][1]);
-  }
-
-  json_object *root_external_command;
-  json_object_object_get_ex(root, "external_command", &root_external_command);
-  const char *external_prog = json_object_get_string(root_external_command);
-  if (external_prog != NULL && strlen(external_prog) > 0) {
-    chctx->external_program = malloc(strlen(external_prog) + 1);
-    if (chctx->external_program == NULL) {
-      SYSLOG_ERR("malloc() failed");
-      goto err_external_program;
-    }
-    strcpy(chctx->external_program, external_prog);
-    syslog(LOG_INFO, "external_program to execute on threshold crossing: [%s]",
-           chctx->external_program);
-  } else {
-    syslog(LOG_INFO, "external_program is empty");
-    goto err_external_program;
-  }
-
-  chctx->h = init_7seg_from_json(root_7sd);
+  json_pointer_get((json_object *)config, "/ch/7seg_display", &json_ele);
+  chctx->h = init_7seg_from_json(json_ele);
   if (chctx->h == NULL) {
     goto err_init_7seg_from_json;
   }
-  return chctx;
 
+  int rc;
+
+  /* Required before calling other mosquitto functions */
+  if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
+    SYSLOG_ERR("mosquitto_lib_init() failed");
+    goto err_init_mosquitto;
+  }
+  /* Create a new client instance.
+   * id = NULL -> ask the broker to generate a client id for us
+   * clean session = true -> the broker should remove old sessions when we
+   * connect obj = NULL -> we aren't passing any of our private data for
+   * callbacks
+   */
+  chctx->mosq = mosquitto_new(NULL, true, NULL);
+  if (chctx->mosq == NULL) {
+    SYSLOG_ERR("mosquitto_new() failed");
+    goto err_init_mosquitto;
+  }
+  if ((rc = mosquitto_username_pw_set(chctx->mosq, username, password)) !=
+      MOSQ_ERR_SUCCESS) {
+    SYSLOG_ERR("mosquitto_username_pw_set() failed: %s",
+               mosquitto_strerror(rc));
+    goto err_mosquitto_config;
+  }
+  if ((rc = mosquitto_tls_set(chctx->mosq, ca_file_path, NULL, NULL, NULL,
+                              NULL)) != MOSQ_ERR_SUCCESS) {
+    SYSLOG_ERR("mosquitto_tls_set() failed: %s", mosquitto_strerror(rc));
+    goto err_mosquitto_config;
+  }
+  mosquitto_connect_callback_set(chctx->mosq, mosq_on_connect);
+  mosquitto_disconnect_callback_set(chctx->mosq, mosq_on_connect);
+  mosquitto_publish_callback_set(chctx->mosq, mosq_on_publish);
+  mosquitto_log_callback_set(chctx->mosq, mosq_log_callback);
+
+  /*  This call makes the socket connection only, it does not complete
+   * the MQTT CONNECT/CONNACK flow, you should use mosquitto_loop_start() or
+   * mosquitto_loop_forever() for processing net traffic. */
+  rc = mosquitto_connect(chctx->mosq, host, 8883, 60);
+  if (rc != MOSQ_ERR_SUCCESS) {
+    SYSLOG_ERR("mosquitto_connect() failed: %s", mosquitto_strerror(rc));
+    goto err_mosquitto_connect;
+  }
+
+  /* Run the network loop in a background thread, this call returns quickly. */
+  if ((mosquitto_loop_start(chctx->mosq)) != MOSQ_ERR_SUCCESS) {
+    SYSLOG_ERR("mosquitto_loop_start() failed: %s", mosquitto_strerror(rc));
+    goto err_mosquitto_connect;
+  }
+
+  return chctx;
+err_mosquitto_config:
+err_mosquitto_connect:
+  mosquitto_destroy(chctx->mosq);
+err_init_mosquitto:
 err_init_7seg_from_json:
-  free(chctx->external_program);
-err_external_program:
-  free(chctx->month_days);
-err_malloc_month_days:
-err_no_effective_dates:
+err_invalid_settings:
   free(chctx);
 err_malloc_chctx:
   return NULL;
@@ -108,69 +132,29 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   struct iotctrl_7seg_disp_handle *h = chctx->h;
   iotctrl_7seg_disp_update_as_four_digit_float(h, r->temperature_celsius, 0);
 
-  time_t t = time(NULL);
-  int interval_sec = 3600 * 3;
-  if (t - chctx->last_status_update_at < interval_sec)
-    return 0;
+  time_t now;
+  struct tm *utc_time;
+  char iso_time[21];
+  time(&now);
+  utc_time = gmtime(&now);
+  strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%SZ", utc_time);
 
-  struct tm tm = *localtime(&t);
-  bool is_effective = false;
-  for (size_t i = 0; i < chctx->date_count; ++i) {
-    if (chctx->month_days[i][0] == tm.tm_mon + 1 &&
-        chctx->month_days[i][1] == tm.tm_mday) {
-      is_effective = true;
-      break;
-    }
-  }
-  if (!is_effective) {
-    syslog(LOG_INFO,
-           "Today (%02d, %02d) is not an effective day, will retry later...",
-           tm.tm_mon + 1, tm.tm_mday);
-    chctx->last_status_update_at = t;
-    return 0;
-  }
-  if (tm.tm_hour < 7 || tm.tm_hour > 21) {
-    syslog(LOG_INFO,
-           "Today (%02d, %02d) is an effective day but now (%dhrs) is out of "
-           "effective hours, will retry later...",
-           tm.tm_mon + 1, tm.tm_mday, tm.tm_hour);
-    chctx->last_status_update_at = t;
-    return 0;
-  }
-  float threshold = 28.0;
-  /*syslog(LOG_INFO,
-         "Today (%02d, %02d) is an effective day and %dhrs is within effective "
-         "hours, checking temperature against threshold %f degrees Celsius",
-         tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, threshold);*/
-  if (r->temperature_celsius <= threshold)
-    return 0;
-  chctx->last_status_update_at = t;
-
-  // By design, chctx->external_program should never be NULL
-  if (chctx->external_program == NULL)
-    return 0;
-  char external_command[PATH_MAX];
-  snprintf(external_command, PATH_MAX - 1, chctx->external_program,
+  char payload[128];
+  snprintf(payload, sizeof(payload) - 1,
+           "{\"timestamp\": \"%s\", \"temp_celsius\":%f}", iso_time,
            r->temperature_celsius);
-
-  syslog(LOG_INFO,
-         "Temperature reading (%f°C) is higer than the threshold, about to "
-         "execute the external program: [%s]",
-         r->temperature_celsius, external_command);
-
-  int ret = 0;
-  if ((ret = system(external_command)) != 0) {
-    SYSLOG_ERR("The external program: returned non-zero value: %d", ret);
-    return 1;
-  }
+  mosquitto_publish(chctx->mosq, NULL, chctx->topic, strlen(payload), payload,
+                    1, false);
   return 0;
 }
 
 void post_collection_destroy(void *ctx) {
+  if (ctx == NULL)
+    return;
   struct CHContext *chctx = (struct CHContext *)ctx;
-  free(chctx->external_program);
-  free(chctx->month_days);
   iotctrl_7seg_disp_destroy(chctx->h);
+  mosquitto_destroy(chctx->mosq);
+  mosquitto_lib_cleanup();
   free(chctx);
 }
 
@@ -181,10 +165,9 @@ void *collection_init(const json_object *config) {
     goto err_malloc_handle;
   }
 
-  const json_object *root = config;
-  json_object *root_dl11_device_path;
-  json_object_object_get_ex(root, "dl11_device_path", &root_dl11_device_path);
-  const char *device_path = json_object_get_string(root_dl11_device_path);
+  json_object *json_ele;
+  json_pointer_get((json_object *)config, "/ch/dl11_device_path", &json_ele);
+  const char *device_path = json_object_get_string(json_ele);
   if (device_path != NULL)
     d->device_path = malloc(strlen(device_path) + 1);
   else
@@ -225,6 +208,8 @@ int collection(void *ctx) {
 }
 
 void collection_destroy(void *ctx) {
+  if (ctx == NULL)
+    return;
   struct DL11MC *dl11 = (struct DL11MC *)ctx;
   free(dl11->device_path);
   dl11->device_path = NULL;

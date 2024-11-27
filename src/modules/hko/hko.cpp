@@ -1,6 +1,6 @@
 #include "../../utils.h"
+#include "../libs/mqtt.h"
 #include "../module.h"
-#include "mqtt-funcs.h"
 
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
@@ -124,8 +124,8 @@ int collection(void *ctx) {
 }
 
 void collection_destroy(void *ctx) {
-  struct CollectionCtx *_ctx = (struct CollectionCtx *)ctx;
-  if (_ctx == NULL)
+  if (ctx == NULL)
     return;
+  struct CollectionCtx *_ctx = (struct CollectionCtx *)ctx;
   free(_ctx);
 }
