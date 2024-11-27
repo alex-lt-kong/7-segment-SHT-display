@@ -19,14 +19,13 @@ int load_values_from_json(const char *settings_path) {
     goto err_json_parsing;
   }
 
-  json_object *root_collection_event_interval_uc;
-  json_object_object_get_ex(root, "collection_event_interval_us",
-                            &root_collection_event_interval_uc);
+  json_object *json_ele;
+  json_object_object_get_ex(root, "collection_event_interval_ms",
+                            &json_ele);
 
-  gv_collection_event_interval_us =
-      json_object_get_uint64(root_collection_event_interval_uc);
+  gv_collection_event_interval_ms = json_object_get_uint64(json_ele);
 
-  if (gv_collection_event_interval_us == 0) {
+  if (gv_collection_event_interval_ms == 0) {
     SYSLOG_ERR("Some required values are not provided");
     retval = -2;
     goto err_invalid_config;

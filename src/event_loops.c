@@ -33,7 +33,7 @@ void ev_collect_data() {
   while (!ev_flag) {
     // You need to have sleep at the beginning so that continue branch will also
     // trigger this
-    interruptible_sleep_us(gv_collection_event_interval_us);
+    interruptible_sleep_us(gv_collection_event_interval_ms * 1000);
     int ret;
     if ((ret = collection(c_ctx)) < 0) {
       ev_flag = 1;
