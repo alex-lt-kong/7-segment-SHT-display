@@ -1,4 +1,5 @@
 #include "../../utils.h"
+#include "../libs/mqtt.h"
 #include "../module.h"
 
 #include <iotctrl/dht31.h>
@@ -30,91 +31,27 @@ struct ConnectionInfo {
   char *dl11_device_path;
 };
 
-void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
-                       const char *str) {
-  (void)mosq;
-  (void)userdata;
-  switch (level) {
-  // case MOSQ_LOG_DEBUG:
-  case MOSQ_LOG_INFO:
-    syslog(LOG_INFO, "%s", str);
-    break;
-  case MOSQ_LOG_NOTICE:
-    syslog(LOG_INFO, "%s", str);
-    break;
-  case MOSQ_LOG_WARNING:
-    syslog(LOG_WARNING, "%s", str);
-    break;
-  case MOSQ_LOG_ERR: {
-    SYSLOG_ERR("%s", str);
-    break;
-  }
-  }
-}
-
-void mosq_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
-  (void)mosq;
-  struct PostCollectionCtx *ctx = (struct PostCollectionCtx *)obj;
-  syslog(LOG_INFO, "mosq_on_connect(): %s",
-         mosquitto_connack_string(reason_code));
-  ctx->is_mqtt_connected = true;
-}
-
-void mosq_on_disconnect(struct mosquitto *mosq, void *obj, int reason_code) {
-  (void)mosq;
-  /* Print out the connection result. mosquitto_connack_string() produces an
-   * appropriate string for MQTT v3.x clients, the equivalent for MQTT v5.0
-   * clients is mosquitto_reason_string().
-   */
-  struct PostCollectionCtx *ctx = (struct PostCollectionCtx *)obj;
-  printf("mosq_on_disconnect(): %s\n", mosquitto_connack_string(reason_code));
-  ctx->is_mqtt_connected = false;
-}
-
-/* Callback called when the client knows to the best of its abilities that a
- * PUBLISH has been successfully sent.  */
-void mosq_on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
-  (void)mosq;
-  (void)obj;
-  syslog(LOG_INFO,
-         "mosq_on_publish(): Message (msg_id: %d) has been published.", msg_id);
-}
-
 void *post_collection_init(const json_object *config) {
   struct PostCollectionCtx *ctx = malloc(sizeof(struct PostCollectionCtx));
   if (ctx == NULL)
     goto err_ctx_malloc;
   ctx->is_mqtt_connected = false;
 
-  json_object *root;
-  if (json_object_object_get_ex(config, "dd_mqtt", &root) == false) {
-    SYSLOG_ERR("dd_mqtt not defined in config files");
-    goto err_json_key_not_found;
-  }
-  json_object *root_ca_file_path;
-  json_object *root_username;
-  json_object *root_password;
-  json_object *root_host;
-  json_object *root_topic;
-  const char *ca_file_path;
-  const char *username;
-  const char *password;
-  const char *host;
-  if (json_object_object_get_ex(root, "ca_file_path", &root_ca_file_path) ==
-          false ||
-      json_object_object_get_ex(root, "username", &root_username) == false ||
-      json_object_object_get_ex(root, "password", &root_password) == false ||
-      json_object_object_get_ex(root, "host", &root_host) == false ||
-      json_object_object_get_ex(root, "topic", &root_topic) == false) {
-    SYSLOG_ERR(
-        "ca_file_path/username/password/host not defined in config files");
-    goto err_json_key_not_found;
-  }
-  ca_file_path = json_object_get_string(root_ca_file_path);
-  username = json_object_get_string(root_username);
-  password = json_object_get_string(root_password);
-  host = json_object_get_string(root_host);
-  ctx->topic = (char *)json_object_get_string(root_topic);
+  json_object *json_ele;
+  const char *host = NULL;
+  const char *username = NULL;
+  const char *password = NULL;
+  const char *ca_file_path = NULL;
+  json_pointer_get((json_object *)config, "/dd/mqtt/host", &json_ele);
+  host = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/dd/mqtt/username", &json_ele);
+  username = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/dd/mqtt/password", &json_ele);
+  password = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/dd/mqtt/ca_file_path", &json_ele);
+  ca_file_path = json_object_get_string(json_ele);
+  json_pointer_get((json_object *)config, "/dd/mqtt/topic", &json_ele);
+  ctx->topic = json_object_get_string(json_ele);
   if (ca_file_path == NULL || username == NULL || password == NULL ||
       host == NULL || ctx->topic == NULL) {
     SYSLOG_ERR(
@@ -241,9 +178,9 @@ void *collection_init(const json_object *config) {
   }
 
   json_object *root;
-  if (json_object_object_get_ex(config, "dd_mqtt", &root) == false) {
-    SYSLOG_ERR("dd_mqtt not defined in config files");
-    goto err_dd_mqtt_section_not_found;
+  if (json_object_object_get_ex(config, "dd", &root) == false) {
+    SYSLOG_ERR("dd not defined in config files");
+    goto err_dd_section_not_found;
   }
 
   const char *device_path;
@@ -288,7 +225,7 @@ void *collection_init(const json_object *config) {
 
 err_malloc_dl11_path:
   free(conn->dht31_device_path);
-err_dd_mqtt_section_not_found:
+err_dd_section_not_found:
 err_dht31_path_not_found:
 err_malloc_dht31_path:
   free(conn);

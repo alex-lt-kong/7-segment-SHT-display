@@ -1,10 +1,12 @@
 {
-    "dd_mqtt": {
-        "host": "localhost",
-        "username": "test",
-        "password": "test",
-        "topic": "topic/test",
-        "ca_file_path": "/etc/ssl/certs/ca-certificates.crt",
+    "dd": {
+        "mqtt": {
+            "host": "localhost",
+            "username": "test",
+            "password": "test",
+            "topic": "topic/test",
+            "ca_file_path": "/etc/ssl/certs/ca-certificates.crt"
+        },
         "dht31_device_path": "/dev/i2c-1",
         "dl11_device_path": "/dev/ttyUSB0",
         "7seg_display0": {

@@ -1,7 +1,7 @@
 #define FMT_HEADER_ONLY
 
+#include "../libs/7seg.h"
 #include "../module.h"
-#include "../module_lib.h"
 
 #include <cxxopts.hpp>
 #include <fmt/core.h>
@@ -58,8 +58,7 @@ void mosquitto_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
    * the connection drops and is automatically resumed by the client, then the
    * subscriptions will be recreated when the client reconnects. */
   rc = mosquitto_subscribe(
-      mosq, NULL,
-      settings.value("/dd_mqtt/topic"_json_pointer, "topic").c_str(), 1);
+      mosq, NULL, settings.value("/dd/topic"_json_pointer, "topic").c_str(), 1);
   if (rc != MOSQ_ERR_SUCCESS) {
     spdlog::error("mosquitto_subscribe() failed: {}", mosquitto_strerror(rc));
     /* We might as well disconnect if we were unable to subscribe */
@@ -138,13 +137,13 @@ int main(int argc, char **argv) {
 
   // clang-format off
     struct iotctrl_7seg_disp_connection conn0, conn1;
-    conn0.data_pin_num = settings.value("/dd_mqtt/7seg_display0/data_pin_num"_json_pointer, 22);
-    conn0.clock_pin_num = settings.value("/dd_mqtt/7seg_display0/clock_pin_num"_json_pointer, 11);
-    conn0.latch_pin_num = settings.value("/dd_mqtt/7seg_display0/latch_pin_num"_json_pointer, 18);
-    conn0.chain_num = settings.value("/dd_mqtt/7seg_display0/chain_num"_json_pointer, 2);
-    conn0.refresh_rate_hz = settings.value("/dd_mqtt/7seg_display0/refresh_rate_hz"_json_pointer, 2000);
+    conn0.data_pin_num = settings.value("/dd/7seg_display0/data_pin_num"_json_pointer, 22);
+    conn0.clock_pin_num = settings.value("/dd/7seg_display0/clock_pin_num"_json_pointer, 11);
+    conn0.latch_pin_num = settings.value("/dd/7seg_display0/latch_pin_num"_json_pointer, 18);
+    conn0.chain_num = settings.value("/dd/7seg_display0/chain_num"_json_pointer, 2);
+    conn0.refresh_rate_hz = settings.value("/dd/7seg_display0/refresh_rate_hz"_json_pointer, 2000);
     strcpy(conn0.gpiochip_path,
-    settings.value("/dd_mqtt/7seg_display0/gpiochip_path"_json_pointer, "/dev/gpiochip0").c_str());
+    settings.value("/dd/7seg_display0/gpiochip_path"_json_pointer, "/dev/gpiochip0").c_str());
   // clang-format on
   if ((h0 = iotctrl_7seg_disp_init(conn0)) == NULL) {
     spdlog::error("iotctrl_7seg_disp_init(conn0) failed. Check stderr for "
@@ -152,12 +151,12 @@ int main(int argc, char **argv) {
     goto err_h0_error;
   }
   // clang-format off
-    conn1.data_pin_num = settings.value("/dd_mqtt/7seg_display1/data_pin_num"_json_pointer, 22);
-    conn1.clock_pin_num = settings.value("/dd_mqtt/7seg_display1/clock_pin_num"_json_pointer, 11);
-    conn1.latch_pin_num = settings.value("/dd_mqtt/7seg_display1/latch_pin_num"_json_pointer, 18);
-    conn1.chain_num = settings.value("/dd_mqtt/7seg_display1/chain_num"_json_pointer, 2);
-    conn1.refresh_rate_hz = settings.value("/dd_mqtt/7seg_display1/refresh_rate_hz"_json_pointer, 2000);
-    strcpy(conn1.gpiochip_path, settings.value("/dd_mqtt/7seg_display1/gpiochip_path"_json_pointer,
+    conn1.data_pin_num = settings.value("/dd/7seg_display1/data_pin_num"_json_pointer, 22);
+    conn1.clock_pin_num = settings.value("/dd/7seg_display1/clock_pin_num"_json_pointer, 11);
+    conn1.latch_pin_num = settings.value("/dd/7seg_display1/latch_pin_num"_json_pointer, 18);
+    conn1.chain_num = settings.value("/dd/7seg_display1/chain_num"_json_pointer, 2);
+    conn1.refresh_rate_hz = settings.value("/dd/7seg_display1/refresh_rate_hz"_json_pointer, 2000);
+    strcpy(conn1.gpiochip_path, settings.value("/dd/7seg_display1/gpiochip_path"_json_pointer,
     "/dev/gpiochip0").c_str());
   // clang-format on
   if ((h1 = iotctrl_7seg_disp_init(conn1)) == NULL) {
@@ -175,8 +174,8 @@ int main(int argc, char **argv) {
   }
   if ((rc = mosquitto_username_pw_set(
            mosq,
-           settings.value("/dd_mqtt/username"_json_pointer, "test").c_str(),
-           settings.value("/dd_mqtt/password"_json_pointer, "test").c_str())) !=
+           settings.value("/dd/mqtt/username"_json_pointer, "test").c_str(),
+           settings.value("/dd/mqtt/password"_json_pointer, "test").c_str())) !=
       MOSQ_ERR_SUCCESS) {
     spdlog::error("mosquitto_username_pw_set() error: {}",
                   mosquitto_strerror(rc));
@@ -184,7 +183,7 @@ int main(int argc, char **argv) {
   }
   if ((rc = mosquitto_tls_set(
            mosq,
-           settings.value("/dd_mqtt/ca_file_path"_json_pointer, "/tmp/ca.crt")
+           settings.value("/dd/mqtt/ca_file_path"_json_pointer, "/tmp/ca.crt")
                .c_str(),
            NULL, NULL, NULL, NULL)) != MOSQ_ERR_SUCCESS) {
     spdlog::error("mosquitto_tls_set() error: {}", mosquitto_strerror(rc));
@@ -195,7 +194,7 @@ int main(int argc, char **argv) {
   mosquitto_message_callback_set(mosq, mosquitto_on_message);
 
   rc = mosquitto_connect(
-      mosq, settings.value("/dd_mqtt/host"_json_pointer, "localhost").c_str(),
+      mosq, settings.value("/dd/mqtt/host"_json_pointer, "localhost").c_str(),
       8883, 60);
   if (rc != MOSQ_ERR_SUCCESS) {
     spdlog::error("mosquitto_connect() error: {}", mosquitto_strerror(rc));
