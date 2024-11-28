@@ -58,7 +58,8 @@ void mosquitto_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
    * the connection drops and is automatically resumed by the client, then the
    * subscriptions will be recreated when the client reconnects. */
   rc = mosquitto_subscribe(
-      mosq, NULL, settings.value("/dd/topic"_json_pointer, "topic").c_str(), 1);
+      mosq, NULL,
+      settings.value("/dd/mqtt/topic"_json_pointer, "topic").c_str(), 1);
   if (rc != MOSQ_ERR_SUCCESS) {
     spdlog::error("mosquitto_subscribe() failed: {}", mosquitto_strerror(rc));
     /* We might as well disconnect if we were unable to subscribe */
@@ -87,7 +88,7 @@ void mosquitto_on_subscribe(struct mosquitto *mosq, void *obj, int mid,
   if (have_subscription == false) {
     /* The broker rejected all of our subscriptions, we know we only sent
      * the one SUBSCRIBE, so there is no point remaining connected. */
-    fprintf(stderr, "Error: All subscriptions rejected.\n");
+    spdlog::error("Error: All subscriptions rejected.");
     mosquitto_disconnect(mosq);
   }
 }
