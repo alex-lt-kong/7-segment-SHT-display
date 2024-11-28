@@ -22,7 +22,10 @@ void *post_collection_init(const json_object *config);
 int post_collection(void *ctx, void *pc_ctx);
 
 /**
- * @brief Release the resources allocated to/managed by the context object. This function will always be called regardless of whether post_collection_init() is successful
+ * @brief Release the resources allocated to/managed by the context object.
+ * @note This function will only called if the init() function returns
+ * a valid object (emulating C++ destructor's behavior). But implementers are
+ * still advised to check for NULL if dereference is needed for resources release.
  */
 void post_collection_destroy(void *pc_ctx);
 
@@ -43,6 +46,9 @@ int collection(void *ctx);
 
 /**
  * @brief Release the resources allocated to/managed by the context object.
+ * @note This function will only called if the init() function returns
+ * a valid object (emulating C++ destructor's behavior). But implementers are
+ * still advised to check for NULL if dereference is needed for resources release.
  */
 void collection_destroy(void *ctx);
 

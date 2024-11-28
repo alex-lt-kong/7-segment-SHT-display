@@ -5,6 +5,7 @@
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
 #include <curlpp/cURLpp.hpp>
+#include <fmt/core.h>
 #include <mosquitto.h>
 #include <nlohmann/json.hpp>
 
@@ -51,9 +52,9 @@ void *post_collection_init(const json_object *config) {
     ctx = NULL;
     return NULL;
   }
-  ctx->mosq = initMosquitto(host, ca_file_path, username, password);
+  ctx->mosq = init_mosquitto(host, ca_file_path, username, password);
   if (ctx->mosq == NULL) {
-    SYSLOG_ERR("initMosquitto() failed");
+    SYSLOG_ERR("init_mosquitto() failed");
     delete ctx;
     ctx = NULL;
     return NULL;
@@ -97,14 +98,20 @@ int collection(void *ctx) {
     os << curlpp::options::Url("https://data.weather.gov.hk/weatherAPI/"
                                "opendata/weather.php?dataType=rhrread&lang=en");
     auto j = json::parse(os.str());
-    json data = j["temperature"]["data"][19];
-    if (data.value("/place"_json_pointer, "") != "Happy Valley") {
-      throw std::invalid_argument(std::string("Unexpected place: ") +
-                                  data.value("/place"_json_pointer, ""));
+    json data;
+    auto place = "Happy Valley";
+    for (const auto &_data : j["temperature"]["data"]) {
+      if (_data.value("/place"_json_pointer, "") == place) {
+        data = _data;
+      }
+    }
+    if (data.value("/place"_json_pointer, "") != place) {
+      throw std::invalid_argument(
+          fmt::format("Payload does not contain place == {}", place));
     }
     if (data.value("/unit"_json_pointer, "") != "C") {
-      throw std::invalid_argument(std::string("Unit: ") +
-                                  data.value("/unit"_json_pointer, ""));
+      throw std::invalid_argument(fmt::format(
+          "Unexpected unit: {}", data.value("/unit"_json_pointer, "")));
     }
     syslog(LOG_INFO, "Data from HK gov: recordTime: %s, air temp: %f°C",
            j["temperature"]["recordTime"].get<std::string>().c_str(),

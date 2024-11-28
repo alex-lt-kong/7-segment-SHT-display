@@ -7,19 +7,20 @@ void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
                        const char *str) {
   (void)mosq;
   (void)userdata;
+  const char fmt[] = "[Mosquitto log] %s";
   switch (level) {
   // case MOSQ_LOG_DEBUG:
   case MOSQ_LOG_INFO:
-    syslog(LOG_INFO, "%s", str);
+    syslog(LOG_INFO, fmt, str);
     break;
   case MOSQ_LOG_NOTICE:
-    syslog(LOG_INFO, "%s", str);
+    syslog(LOG_INFO, fmt, str);
     break;
   case MOSQ_LOG_WARNING:
-    syslog(LOG_WARNING, "%s", str);
+    syslog(LOG_WARNING, fmt, str);
     break;
   case MOSQ_LOG_ERR:
-    syslog(LOG_ERR, "%s", str);
+    syslog(LOG_ERR, fmt, str);
     break;
   }
 }
@@ -27,7 +28,7 @@ void mosq_log_callback(struct mosquitto *mosq, void *userdata, int level,
 void mosq_on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
   (void)mosq;
   (void)obj;
-  syslog(LOG_INFO, "mosq_on_connect: %s",
+  syslog(LOG_INFO, "mosq_on_connect(): %s",
          mosquitto_connack_string(reason_code));
 }
 
@@ -45,7 +46,7 @@ void mosq_on_publish(struct mosquitto *mosq, void *obj, int msg_id) {
          "mosq_on_publish(): Message (msg_id: %d) has been published.", msg_id);
 }
 
-struct mosquitto *initMosquitto(const char *host, const char *ca_file_path,
+struct mosquitto *init_mosquitto(const char *host, const char *ca_file_path,
                                 const char *username, const char *password) {
   int rc;
   struct mosquitto *mosq;

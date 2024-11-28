@@ -26,7 +26,7 @@ void ev_collect_data() {
   void *pc_ctx = post_collection_init(gv_config_root);
   if (pc_ctx == NULL) {
     SYSLOG_ERR("post_collection_init() failed, post collection task will not "
-               "run (but collection()) event will still run...");
+               "run (but collection() event will still run...)");
   }
   syslog(LOG_INFO, "post_collection_init() returned without errors");
 
@@ -43,14 +43,15 @@ void ev_collect_data() {
     if (ret > 0)
       syslog(LOG_WARNING,
              "collection() encounters a recoverable error (ret: %d), "
-             "post_collection() call will be skipped",
+             "post_collection() call will be skipped (but retried in the next iteration)",
              ret);
     if (pc_ctx == NULL)
       continue;
 
     post_collection(c_ctx, pc_ctx);
   }
-  post_collection_destroy(pc_ctx);
+  if (pc_ctx != NULL)
+    post_collection_destroy(pc_ctx);
   collection_destroy(c_ctx);
 err_collection_init:
   syslog(LOG_INFO, "ev_collect_data() exited gracefully.");

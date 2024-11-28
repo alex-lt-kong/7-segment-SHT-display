@@ -27,6 +27,9 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   return 0;
 }
 
+// IMPORTANT: collection_destroy() will only be called if the init() function
+// returns a valid object (emulating C++ destructor's behavior). But
+// implementers are still advised to check for NULL before dereferencing it.
 void post_collection_destroy(void *ctx) {
   struct PostCollectionCtx *_ctx = (struct PostCollectionCtx *)ctx;
   free(_ctx);
@@ -48,7 +51,12 @@ int collection(void *ctx) {
   return 0;
 }
 
+// IMPORTANT: collection_destroy() will only be called if the init() function
+// returns a valid object (emulating C++ destructor's behavior). But
+// implementers are still advised to check for NULL before dereferencing it.
 void collection_destroy(void *ctx) {
+  if (ctx == NULL)
+    return;
   struct CollectionCtx *_ctx = (struct CollectionCtx *)ctx;
   free(_ctx);
 }
