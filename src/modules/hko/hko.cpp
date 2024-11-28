@@ -134,5 +134,5 @@ void collection_destroy(void *ctx) {
   if (ctx == NULL)
     return;
   struct CollectionCtx *_ctx = (struct CollectionCtx *)ctx;
-  free(_ctx);
+  delete _ctx;
 }
