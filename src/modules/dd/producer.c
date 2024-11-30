@@ -134,7 +134,7 @@ int post_collection(void *c_ctx, void *pc_ctx) {
   strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%SZ", utc_time);
 
   snprintf(payload, sizeof(payload),
-           "{\"timestamp\": \"%s\", \"temp_outdoor_celsius\": %.1f, "
+           "{\"timestamp_utc\": \"%s\", \"temp_outdoor_celsius\": %.1f, "
            "\"temp_indoor_celsius\": %.1f, "
            "\"rh_outdoor\": %.1f}",
            iso_time, _readings->temp_outdoor_celsius,

@@ -29,6 +29,7 @@
 
 using namespace std;
 using json = nlohmann::json;
+volatile sig_atomic_t ev_flag;
 
 struct Readings {
   double temp_outdoor_celsius;
@@ -45,6 +46,19 @@ struct ConnectionInfo {
 struct iotctrl_7seg_disp_handle *h0;
 struct iotctrl_7seg_disp_handle *h1;
 json settings;
+chrono::system_clock::time_point update_time_utc;
+
+mutex update_time_mtx;
+mutex readings_mtx;
+
+void signal_handler(int signum) {
+  signum %= 100;
+  char msg[] = "Signal [  ] caught\n";
+  msg[8] = '0' + (char)(signum / 10);
+  msg[9] = '0' + (char)(signum % 10);
+  write(STDERR_FILENO, msg, strlen(msg));
+  ev_flag = 1;
+}
 
 /* Callback called when the client receives a CONNACK message from the broker.
  */
@@ -115,10 +129,24 @@ void mosquitto_on_message(struct mosquitto *mosq, void *obj,
       h1, payload.value("/temp_outdoor_celsius"_json_pointer, 888.8), 0);
   iotctrl_7seg_disp_update_as_four_digit_float(
       h1, payload.value("/temp_indoor_celsius"_json_pointer, 888.8), 1);
+
+  auto parseISO8601 = [](const string &iso8601String) {
+    tm tm = {};
+    istringstream ss(iso8601String);
+    ss >> get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+    return chrono::system_clock::from_time_t(std::mktime(&tm));
+  };
+
+  {
+    lock_guard<mutex> lock(update_time_mtx);
+    update_time_utc =
+        parseISO8601(payload.value("/timestamp_utc"_json_pointer, ""));
+  }
 }
 
 int main(int argc, char **argv) {
   struct mosquitto *mosq;
+  ev_flag = 0;
   cxxopts::Options options(argv[0], PROGRAM_NAME);
   string config_path;
   spdlog::set_pattern("%Y-%m-%d %T.%e | %7l | %5t | %v");
@@ -132,6 +160,8 @@ int main(int argc, char **argv) {
     std::cout << options.help() << "\n";
     return 0;
   }
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
   config_path = result["config-path"].as<std::string>();
   ifstream f(config_path);
   settings = json::parse(f);
@@ -204,8 +234,40 @@ int main(int argc, char **argv) {
   }
 
   spdlog::info("mosquitto_loop_forever()...");
-  mosquitto_loop_forever(mosq, -1, 1);
-
+  if ((rc = mosquitto_loop_start(mosq)) != MOSQ_ERR_SUCCESS) {
+    spdlog::error("mosquitto_loop_start() error: {}", mosquitto_strerror(rc));
+    goto err_mosquitto_loop_start;
+  }
+  while (!ev_flag) {
+    sleep(6);
+    auto timePointToISO8601 = [](const chrono::system_clock::time_point &tp) {
+      auto tt = chrono::system_clock::to_time_t(tp);
+      tm tm = *gmtime(&tt); // Using gmtime instead of localtime for UTC
+      stringstream ss;
+      ss << put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+      ss << "Z"; // Append UTC indicator
+      return ss.str();
+    };
+    auto max_tolerance_sec = 3600;
+    {
+      lock_guard<mutex> lock(update_time_mtx);
+      auto diff = chrono::duration<double>(chrono::system_clock::now() -
+                                           update_time_utc);
+      spdlog::info("update_time: {} ({:.1f} sec ago)",
+                   timePointToISO8601(update_time_utc), diff.count());
+      if (diff.count() > max_tolerance_sec) {
+        spdlog::info(
+            "update_time older than max_tolerance_sec ({}), resetting display",
+            max_tolerance_sec);
+        iotctrl_7seg_disp_update_as_four_digit_float(h0, 888.8, 0);
+        iotctrl_7seg_disp_update_as_four_digit_float(h0, 888.8, 1);
+        iotctrl_7seg_disp_update_as_four_digit_float(h1, 888.8, 0);
+        iotctrl_7seg_disp_update_as_four_digit_float(h1, 888.8, 1);
+      }
+    }
+  }
+  mosquitto_loop_stop(mosq, 0);
+err_mosquitto_loop_start:
   mosquitto_destroy(mosq);
   mosquitto_lib_cleanup();
   return 0;
